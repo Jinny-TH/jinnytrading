@@ -110,6 +110,13 @@ export default function Page() {
   const accountById = useMemo(() => new Map(accountList.map((a) => [a.id, a])), [accountList]);
   const accountNameById = useMemo(() => new Map(accountList.map((a) => [a.id, a.account_name])), [accountList]);
 
+  const isFallbackAccountId = (id?: string | null) => !!id && id.startsWith('fallback-');
+  const realAccountFor = (account?: Account) => {
+    if (!account) return null;
+    if (!isFallbackAccountId(account.id)) return account;
+    return accounts.find((a) => a.account_name === account.account_name) || null;
+  };
+
   const accountLabel = (h: Holding) => {
     if (h.accounts?.account_name) return h.accounts.account_name;
     if (h.account_id && accountNameById.has(h.account_id)) return accountNameById.get(h.account_id)!;
@@ -230,8 +237,16 @@ export default function Page() {
   }, []);
 
   useEffect(() => {
-    if (!form.account_id && accountList.length) setForm((f) => ({ ...f, account_id: accountList[0].id }));
-  }, [accountList, form.account_id]);
+    if (!form.account_id && accountList.length) {
+      setForm((f) => ({ ...f, account_id: accountList[0].id }));
+      return;
+    }
+    if (isFallbackAccountId(form.account_id) && accounts.length) {
+      const fallback = fallbackAccounts.find((a) => a.id === form.account_id);
+      const real = fallback ? accounts.find((a) => a.account_name === fallback.account_name) : null;
+      if (real) setForm((f) => ({ ...f, account_id: real.id }));
+    }
+  }, [accountList, accounts, form.account_id]);
 
   async function fetchPriceForTicker(ticker: string) {
     try {
@@ -262,7 +277,8 @@ export default function Page() {
       setMsg('종목코드와 종목명을 입력해주세요.');
       return;
     }
-    const account = accountById.get(form.account_id) || accountList[0];
+    const selectedAccount = accountById.get(form.account_id) || accountList[0];
+    const realAccount = realAccountFor(selectedAccount);
     setBusy(true);
     setMsg('종목 저장 중 · 현재가 조회 중...');
     const [fetchedPrice, fetchedYield] = await Promise.all([fetchPriceForTicker(ticker), fetchYieldForTicker(ticker)]);
@@ -271,8 +287,8 @@ export default function Page() {
       name: form.name.trim(),
       risk_type: form.risk_type,
       region: form.region,
-      account_id: account?.id || null,
-      account_name: account?.account_name || null,
+      account_id: realAccount?.id || null,
+      account_name: selectedAccount?.account_name || null,
       quantity: Number(form.quantity || 0),
       avg_price: Number(form.avg_price || 0),
       current_price: fetchedPrice || 0,
