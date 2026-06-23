@@ -111,11 +111,38 @@ export default function Page() {
   const accountNameById = useMemo(() => new Map(accountList.map((a) => [a.id, a.account_name])), [accountList]);
 
   const isFallbackAccountId = (id?: string | null) => !!id && id.startsWith('fallback-');
+  const isUuid = (id?: string | null) => !!id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
   const realAccountFor = (account?: Account) => {
     if (!account) return null;
     if (!isFallbackAccountId(account.id)) return account;
     return accounts.find((a) => a.account_name === account.account_name) || null;
   };
+
+  async function resolveRealAccountForSave() {
+    const preferredId = form.account_id || (selectedAccountId !== ALL_ACCOUNT_ID ? selectedAccountId : '');
+    const selected = accountById.get(preferredId) || accountList[0];
+    const selectedName = selected?.account_name || fallbackAccounts[0].account_name;
+
+    const inMemory = selected && !isFallbackAccountId(selected.id)
+      ? selected
+      : accounts.find((a) => a.account_name === selectedName);
+    if (inMemory?.id && isUuid(inMemory.id)) return inMemory;
+
+    if (isUuid(preferredId)) {
+      const { data } = await supabase.from('accounts').select('*').eq('id', preferredId).maybeSingle();
+      if (data?.id) return data as Account;
+    }
+
+    const { data, error } = await supabase
+      .from('accounts')
+      .select('*')
+      .eq('account_name', selectedName)
+      .maybeSingle();
+
+    if (error) throw new Error('accounts 조회 오류: ' + error.message);
+    if (!data?.id) throw new Error(`accounts 테이블에서 '${selectedName}' 계좌를 찾지 못했습니다.`);
+    return data as Account;
+  }
 
   const accountLabel = (h: Holding) => {
     if (h.accounts?.account_name) return h.accounts.account_name;
@@ -277,13 +304,17 @@ export default function Page() {
       setMsg('종목코드와 종목명을 입력해주세요.');
       return;
     }
-    const selectedAccount = accountById.get(form.account_id) || accountList[0];
-    const realAccount = realAccountFor(selectedAccount);
-    if (!realAccount?.id) {
-      setMsg('계좌 정보를 먼저 확인해주세요. 실제 accounts.id가 필요합니다.');
+    setBusy(true);
+    setMsg('계좌 확인 중...');
+    let realAccount: Account;
+    try {
+      realAccount = await resolveRealAccountForSave();
+    } catch (e: any) {
+      setBusy(false);
+      setMsg(e.message || '계좌 정보를 확인하지 못했습니다. accounts 테이블과 RLS 설정을 확인해주세요.');
       return;
     }
-    setBusy(true);
+
     setMsg('종목 저장 중 · 현재가 조회 중...');
     const [fetchedPrice, fetchedYield] = await Promise.all([fetchPriceForTicker(ticker), fetchYieldForTicker(ticker)]);
     const payload = {
@@ -291,8 +322,8 @@ export default function Page() {
       name: form.name.trim(),
       risk_type: form.risk_type,
       region: form.region,
-      account_id: realAccount?.id || null,
-      account_name: selectedAccount?.account_name || null,
+      account_id: realAccount.id,
+      account_name: realAccount.account_name,
       quantity: Number(form.quantity || 0),
       avg_price: Number(form.avg_price || 0),
       current_price: fetchedPrice || 0,
@@ -304,7 +335,7 @@ export default function Page() {
     if (error) {
       setMsg(error.message);
     } else {
-      setForm({ ticker: '', name: '', risk_type: '위험', region: '미국', account_id: accountList[0]?.id || '', quantity: '', avg_price: '', dividend_yield: '', dividend_cycle: '월' });
+      setForm({ ticker: '', name: '', risk_type: '위험', region: '미국', account_id: realAccount.id || accountList[0]?.id || '', quantity: '', avg_price: '', dividend_yield: '', dividend_cycle: '월' });
       setMsg(`저장 완료 · 현재가 ${fetchedPrice ? won(fetchedPrice) : '미조회'} · 배당률 ${fetchedYield ? (fetchedYield * 100).toFixed(2) + '% 자동 반영' : '직접 입력값 반영'}`);
       load();
     }
