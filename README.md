@@ -1,89 +1,83 @@
-# Jinny Trading v9 - Accounts Table
+# Jinny Trading v12 - 동일 종목 계좌별 저장 최종 수정
 
-이번 버전 변경 사항:
+## 이번 수정 내용
 
-- `accounts` 테이블 분리
-- `한국투자증권 ISA` 계좌 추가
-- 계좌 탭을 DB에서 자동 생성
-- 설정의 `기본 ETF 데이터 DB에 넣기` 버튼 삭제
-- 종목 추가 시 계좌 선택값을 `account_id`로 저장
-- 매일 오전 3시 자동 기록에서도 계좌별 `account_id/account_name` 저장
+- 종목 저장 기준을 `ticker` 단독에서 `account_id + ticker`로 변경
+- 같은 종목을 한국투자증권 주식계좌와 한국투자증권 ISA에 각각 보유 가능
+- 현재가 수정, 배당률 업데이트, 삭제를 개별 보유종목 `id` 기준으로 처리
+- 종목 추가 시 fallback 계좌 ID가 저장되지 않도록 방지
 
-## 업로드 전에 Supabase SQL Editor에서 실행
+## Supabase SQL
+
+이미 아래 인덱스가 생성되어 있다면 다시 실행하지 않아도 됩니다.
+확인용 SQL:
 
 ```sql
-create table if not exists accounts (
-  id uuid primary key default gen_random_uuid(),
-  account_name text not null unique,
-  broker text,
-  account_type text,
-  display_order int default 0,
-  is_active boolean default true,
-  created_at timestamptz default now()
-);
+select indexname, indexdef
+from pg_indexes
+where tablename = 'holdings';
+```
 
-insert into accounts (account_name, broker, account_type, display_order, is_active)
-values
-  ('삼성생명 퇴직연금', '삼성생명', '퇴직연금', 1, true),
-  ('삼성증권 연금저축', '삼성증권', '연금저축', 2, true),
-  ('한국투자증권 주식계좌', '한국투자증권', '주식', 3, true),
-  ('한국투자증권 ISA', '한국투자증권', 'ISA', 4, true)
-on conflict (account_name) do update set
-  broker = excluded.broker,
-  account_type = excluded.account_type,
-  display_order = excluded.display_order,
-  is_active = excluded.is_active;
+`holdings_account_ticker_unique`가 보이면 정상입니다.
 
+처음 적용하는 경우 아래 SQL을 실행하세요.
+
+```sql
+-- 기존 ticker 단독 unique 제거
 alter table holdings
-add column if not exists account_id uuid references accounts(id);
+  drop constraint if exists holdings_ticker_key;
 
-alter table holdings
-add column if not exists account_name text;
+drop index if exists holdings_ticker_key;
 
+-- account_id가 비어 있는 기존 종목은 account_name 기준으로 연결
 update holdings h
-set account_id = a.id,
-    account_name = a.account_name
+set account_id = a.id
 from accounts a
-where coalesce(h.account_name, '삼성생명 퇴직연금') = a.account_name;
+where h.account_id is null
+and h.account_name = a.account_name;
 
+-- 그래도 account_id가 없는 기존 종목은 삼성생명 퇴직연금으로 연결
 update holdings h
 set account_id = a.id,
-    account_name = a.account_name
+    account_name = '삼성생명 퇴직연금'
+from accounts a
+where h.account_id is null
+and a.account_name = '삼성생명 퇴직연금';
+
+-- 448290은 삼성증권 연금저축으로 연결
+update holdings h
+set account_id = a.id,
+    account_name = '삼성증권 연금저축'
 from accounts a
 where h.ticker = '448290'
-  and a.account_name = '삼성증권 연금저축';
+and a.account_name = '삼성증권 연금저축';
 
-alter table daily_snapshots
-add column if not exists account_id uuid references accounts(id);
+-- 같은 계좌 안에서는 같은 종목 중복 방지, 다른 계좌에는 같은 종목 허용
+create unique index if not exists holdings_account_ticker_unique
+on holdings(account_id, ticker);
 
-alter table daily_snapshots
-add column if not exists account_name text default '전체 계좌';
+-- 배당 내역 계좌 구분
+alter table dividend_logs
+add column if not exists account_id uuid;
 
-alter table daily_snapshots
-drop constraint if exists daily_snapshots_snapshot_date_key;
+alter table dividend_logs
+  drop constraint if exists dividend_logs_account_id_fkey;
 
-drop index if exists daily_snapshots_date_account_unique;
+alter table dividend_logs
+add constraint dividend_logs_account_id_fkey
+foreign key (account_id)
+references accounts(id);
 
-create unique index if not exists daily_snapshots_date_account_unique
-on daily_snapshots(snapshot_date, account_name);
+create index if not exists idx_holdings_account_id
+on holdings(account_id);
+
+create index if not exists idx_dividend_logs_account_id
+on dividend_logs(account_id);
 ```
 
-## Vercel Cron
+## 업로드 방법
 
-`vercel.json`에 매일 한국시간 오전 3시 실행 스케줄이 포함되어 있습니다.
-
-```json
-{
-  "crons": [{ "path": "/api/daily-snapshot", "schedule": "0 18 * * *" }]
-}
-```
-
-UTC 18:00 = 한국시간 03:00입니다.
-
-## 테스트
-
-배포 후 아래 주소를 열어 `{ "ok": true }`가 나오면 자동 기록 API가 정상입니다.
-
-```text
-https://jinnytrading.vercel.app/api/daily-snapshot
-```
+1. 이 ZIP 압축 해제
+2. GitHub `Jinny-TH/jinnytrading` 저장소에 전체 덮어쓰기 업로드
+3. Vercel 자동 배포 확인
+4. 배포 후 같은 종목을 서로 다른 계좌에 다시 추가 테스트

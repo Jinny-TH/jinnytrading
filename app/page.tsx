@@ -52,7 +52,7 @@ type Snap = {
   annual_dividend: number;
 };
 
-type DivLog = { id?: string; dividend_month: string; ticker: string | null; amount: number };
+type DivLog = { id?: string; dividend_month: string; ticker: string | null; account_id?: string | null; amount: number };
 
 const ALL_ACCOUNT_ID = 'ALL';
 const fallbackAccounts: Account[] = [
@@ -176,7 +176,7 @@ export default function Page() {
 
   const accountTickers = useMemo(() => new Set(rows.map((r) => r.ticker)), [rows]);
   const filteredLogs = useMemo(
-    () => (selectedAccountId === ALL_ACCOUNT_ID ? logs : logs.filter((l) => !l.ticker || accountTickers.has(l.ticker))),
+    () => selectedAccountId === ALL_ACCOUNT_ID ? logs : logs.filter((l) => l.account_id ? l.account_id === selectedAccountId : (!l.ticker || accountTickers.has(l.ticker))),
     [logs, selectedAccountId, accountTickers]
   );
   const filteredSnaps = useMemo(
@@ -279,6 +279,10 @@ export default function Page() {
     }
     const selectedAccount = accountById.get(form.account_id) || accountList[0];
     const realAccount = realAccountFor(selectedAccount);
+    if (!realAccount?.id) {
+      setMsg('계좌 정보를 먼저 확인해주세요. 실제 accounts.id가 필요합니다.');
+      return;
+    }
     setBusy(true);
     setMsg('종목 저장 중 · 현재가 조회 중...');
     const [fetchedPrice, fetchedYield] = await Promise.all([fetchPriceForTicker(ticker), fetchYieldForTicker(ticker)]);
@@ -295,7 +299,7 @@ export default function Page() {
       dividend_yield: fetchedYield ?? normalizeYield(form.dividend_yield),
       dividend_cycle: form.dividend_cycle,
     };
-    const { error } = await supabase.from('holdings').upsert(payload, { onConflict: 'ticker' });
+    const { error } = await supabase.from('holdings').upsert(payload, { onConflict: 'account_id,ticker' });
     setBusy(false);
     if (error) {
       setMsg(error.message);
@@ -306,15 +310,17 @@ export default function Page() {
     }
   }
 
-  async function delTicker(ticker: string) {
+  async function delHolding(r: Row) {
     if (!confirm('삭제할까요?')) return;
-    await supabase.from('holdings').delete().eq('ticker', ticker);
+    if (r.id) await supabase.from('holdings').delete().eq('id', r.id);
+    else await supabase.from('holdings').delete().eq('ticker', r.ticker).eq('account_id', r.account_id || '');
     load();
   }
 
-  async function changePrice(ticker: string, price: number) {
-    setHoldings((v) => v.map((x) => (x.ticker === ticker ? { ...x, current_price: price } : x)));
-    await supabase.from('holdings').update({ current_price: price }).eq('ticker', ticker);
+  async function changePrice(r: Row, price: number) {
+    setHoldings((v) => v.map((x) => (x.id === r.id ? { ...x, current_price: price } : x)));
+    if (r.id) await supabase.from('holdings').update({ current_price: price }).eq('id', r.id);
+    else await supabase.from('holdings').update({ current_price: price }).eq('ticker', r.ticker).eq('account_id', r.account_id || '');
   }
 
   async function saveSnapshot() {
@@ -339,7 +345,10 @@ export default function Page() {
   async function addDividend() {
     const amount = Number(div.amount);
     if (!amount) return;
-    const { error } = await supabase.from('dividend_logs').insert({ dividend_month: div.dividend_month, ticker: div.ticker || null, amount });
+    const dividendAccountId = selectedAccountId === ALL_ACCOUNT_ID
+      ? (div.ticker ? allRows.find((r) => r.ticker === div.ticker)?.account_id || null : null)
+      : selectedAccountId;
+    const { error } = await supabase.from('dividend_logs').insert({ dividend_month: div.dividend_month, ticker: div.ticker || null, account_id: dividendAccountId, amount });
     if (error) setMsg(error.message);
     else {
       setDiv({ ...div, amount: '' });
@@ -377,7 +386,7 @@ export default function Page() {
           yieldCount += 1;
           patch.dividend_yield = y;
         } else yieldMissed.push(r.ticker);
-        if (Object.keys(patch).length) await supabase.from('holdings').update(patch).eq('ticker', r.ticker);
+        if (Object.keys(patch).length) await supabase.from('holdings').update(patch).eq('id', r.id);
       }
       setMsg(`${count}개 시세 · ${yieldCount}개 배당률 갱신 완료${missed.length ? ` · 시세 미조회: ${missed.join(', ')}` : ''}${yieldMissed.length ? ` · 배당률 미조회: ${yieldMissed.join(', ')}` : ''}`);
       await load();
@@ -402,7 +411,7 @@ export default function Page() {
         const y = Number(json.yields?.[r.ticker]);
         if (y > 0) {
           count += 1;
-          await supabase.from('holdings').update({ dividend_yield: y }).eq('ticker', r.ticker);
+          await supabase.from('holdings').update({ dividend_yield: y }).eq('id', r.id);
         } else missed.push(r.ticker);
       }
       setMsg(`${count}개 종목 배당률 갱신 완료${missed.length ? ` · 미조회: ${missed.join(', ')}` : ''}`);
@@ -490,17 +499,17 @@ export default function Page() {
             <thead><tr><th>계좌</th><th>구분</th><th>종목</th><th className="num">수량</th><th className="num">평균단가</th><th className="num">현재가</th><th className="num">평가금액</th><th className="num">손익</th><th className="num">배당</th><th></th></tr></thead>
             <tbody>
               {rows.map((r) => (
-                <tr key={r.ticker}>
+                <tr key={r.id || `${r.account_id}-${r.ticker}`}> 
                   <td><span className="accountPill">{r.accountLabel}</span></td>
                   <td><span className={'pill ' + (r.risk_type === '위험' ? 'risk' : '')}>{r.risk_type}</span></td>
                   <td><b>{r.name}</b><div className="sub">{r.region} · {r.ticker}</div></td>
                   <td className="num">{Number(r.quantity).toLocaleString()}</td>
                   <td className="num">{Math.round(Number(r.avg_price)).toLocaleString()}</td>
-                  <td className="num"><input className="price" inputMode="numeric" placeholder="미조회" value={Number(r.current_price) > 0 ? Math.round(Number(r.current_price)).toLocaleString('ko-KR') : ''} onChange={(e) => changePrice(r.ticker, parseNumber(e.target.value))} /></td>
+                  <td className="num"><input className="price" inputMode="numeric" placeholder="미조회" value={Number(r.current_price) > 0 ? Math.round(Number(r.current_price)).toLocaleString('ko-KR') : ''} onChange={(e) => changePrice(r, parseNumber(e.target.value))} /></td>
                   <td className="num"><b>{won(r.value)}</b></td>
                   <td className={'num ' + (!r.hasPrice ? '' : r.pl >= 0 ? 'gain' : 'loss')}><b>{r.hasPrice ? won(r.pl) : '현재가 필요'}</b><div>{r.hasPrice ? pct(r.plRate) : '-'}</div></td>
                   <td className="num">{r.dividend_yield ? `${(Number(r.dividend_yield) * 100).toFixed(2)}% · ${r.dividend_cycle}` : '없음'}</td>
-                  <td><button className="btn" onClick={() => delTicker(r.ticker)}><Trash2 size={14}/></button></td>
+                  <td><button className="btn" onClick={() => delHolding(r)}><Trash2 size={14}/></button></td>
                 </tr>
               ))}
             </tbody>
@@ -516,7 +525,7 @@ export default function Page() {
               <input className="input" type="month" value={div.dividend_month} onChange={(e) => setDiv({ ...div, dividend_month: e.target.value })} />
               <select className="input" value={div.ticker} onChange={(e) => setDiv({ ...div, ticker: e.target.value })}>
                 <option value="">전체/구분 없음</option>
-                {rows.map((r) => <option key={r.ticker} value={r.ticker}>{r.name}</option>)}
+                {rows.map((r) => <option key={r.id || `${r.account_id}-${r.ticker}`} value={r.ticker}>{r.name} · {r.accountLabel}</option>)}
               </select>
               <input className="input" placeholder="수령 금액" value={div.amount} onChange={(e) => setDiv({ ...div, amount: e.target.value })} />
               <button className="btn primary" onClick={addDividend}><Plus size={15}/> 추가</button>
