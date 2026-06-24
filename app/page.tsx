@@ -417,35 +417,27 @@ export default function Page() {
 
   async function updatePrices() {
     setBusy(true);
-    setMsg('오늘 시세와 배당률 조회 중...');
+    setMsg('오늘 시세 조회 중...');
     try {
       const codes = rows.map((r) => r.ticker).join(',');
-      const [priceRes, yieldRes] = await Promise.all([fetch('/api/prices?codes=' + encodeURIComponent(codes)), fetch('/api/dividends?codes=' + encodeURIComponent(codes))]);
+      const priceRes = await fetch('/api/prices?codes=' + encodeURIComponent(codes));
       const priceJson = await priceRes.json();
-      const yieldJson = await yieldRes.json();
       let count = 0;
-      let yieldCount = 0;
       const missed: string[] = [];
-      const yieldMissed: string[] = [];
       for (const r of rows) {
         const p = Number(priceJson.prices?.[r.ticker]);
-        const y = Number(yieldJson.yields?.[r.ticker]);
-        const patch: Record<string, number> = {};
         if (p > 0) {
           count += 1;
-          patch.current_price = p;
-        } else missed.push(r.ticker);
-        if (y > 0) {
-          yieldCount += 1;
-          patch.dividend_yield = y;
-        } else yieldMissed.push(r.ticker);
-        if (Object.keys(patch).length) await supabase.from('holdings').update(patch).eq('id', r.id);
+          await supabase.from('holdings').update({ current_price: p }).eq('id', r.id);
+        } else {
+          missed.push(r.ticker);
+        }
       }
-      setMsg(`${count}개 시세 · ${yieldCount}개 배당률 갱신 완료${missed.length ? ` · 시세 미조회: ${missed.join(', ')}` : ''}${yieldMissed.length ? ` · 배당률 미조회: ${yieldMissed.join(', ')}` : ''}`);
+      setMsg(`${count}개 종목 시세만 갱신 완료${missed.length ? ` · 시세 미조회: ${missed.join(', ')}` : ''}`);
       await load();
       setTimeout(saveSnapshot, 300);
     } catch (e: any) {
-      setMsg('시세/배당률 조회 실패: ' + e.message);
+      setMsg('시세 조회 실패: ' + e.message);
     } finally {
       setBusy(false);
     }
@@ -558,7 +550,7 @@ export default function Page() {
                   <td><b>{r.name}</b><div className="sub">{r.region} · {r.ticker}</div></td>
                   <td className="num">{Number(r.quantity).toLocaleString()}</td>
                   <td className="num">{Math.round(Number(r.avg_price)).toLocaleString()}</td>
-                  <td className="num">{Number(r.current_price) > 0 ? Math.round(Number(r.current_price)).toLocaleString('ko-KR') : '미조회'}</td>
+                  <td className="num"><span className="plainPrice">{Number(r.current_price) > 0 ? Math.round(Number(r.current_price)).toLocaleString('ko-KR') : '미조회'}</span></td>
                   <td className="num"><b>{won(r.value)}</b></td>
                   <td className={'num ' + (!r.hasPrice ? '' : r.pl >= 0 ? 'gain' : 'loss')}><b>{r.hasPrice ? won(r.pl) : '현재가 필요'}</b><div>{r.hasPrice ? pct(r.plRate) : '-'}</div></td>
                   <td className="num">{r.dividend_yield ? `${(Number(r.dividend_yield) * 100).toFixed(2)}% · ${r.dividend_cycle}` : '없음'}</td>
