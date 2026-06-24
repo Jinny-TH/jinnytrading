@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../lib/supabase';
-import { RefreshCw, Settings, Plus, Save, Trash2, Percent } from 'lucide-react';
+import { RefreshCw, Settings, Plus, Save, Trash2, Percent, Pencil } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 
 type Account = {
@@ -100,6 +100,7 @@ export default function Page() {
     dividend_yield: '',
     dividend_cycle: '월',
   });
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [div, setDiv] = useState({ dividend_month: month(), ticker: '', amount: '' });
 
   const accountList = useMemo(() => {
@@ -119,29 +120,18 @@ export default function Page() {
   };
 
   async function resolveRealAccountForSave() {
-    const preferredId = form.account_id || (selectedAccountId !== ALL_ACCOUNT_ID ? selectedAccountId : '');
-    const selected = accountById.get(preferredId) || accountList[0];
-    const selectedName = selected?.account_name || fallbackAccounts[0].account_name;
-
-    const inMemory = selected && !isFallbackAccountId(selected.id)
-      ? selected
-      : accounts.find((a) => a.account_name === selectedName);
-    if (inMemory?.id && isUuid(inMemory.id)) return inMemory;
-
-    if (isUuid(preferredId)) {
-      const { data } = await supabase.from('accounts').select('*').eq('id', preferredId).maybeSingle();
-      if (data?.id) return data as Account;
+    if (!accounts.length) {
+      throw new Error('accounts 테이블을 먼저 불러와야 합니다. 새로고침 후 다시 시도해주세요.');
     }
 
-    const { data, error } = await supabase
-      .from('accounts')
-      .select('*')
-      .eq('account_name', selectedName)
-      .maybeSingle();
+    const preferredId = form.account_id || (selectedAccountId !== ALL_ACCOUNT_ID ? selectedAccountId : '');
+    const selected = accounts.find((a) => a.id === preferredId);
 
-    if (error) throw new Error('accounts 조회 오류: ' + error.message);
-    if (!data?.id) throw new Error(`accounts 테이블에서 '${selectedName}' 계좌를 찾지 못했습니다.`);
-    return data as Account;
+    if (!selected || !isUuid(selected.id)) {
+      throw new Error('계좌 선택값이 올바르지 않습니다. 설정에서 실제 계좌를 다시 선택해주세요.');
+    }
+
+    return selected;
   }
 
   const accountLabel = (h: Holding) => {
@@ -264,16 +254,11 @@ export default function Page() {
   }, []);
 
   useEffect(() => {
-    if (!form.account_id && accountList.length) {
-      setForm((f) => ({ ...f, account_id: accountList[0].id }));
-      return;
+    if (!accounts.length) return;
+    if (!form.account_id || isFallbackAccountId(form.account_id) || !accounts.some((a) => a.id === form.account_id)) {
+      setForm((f) => ({ ...f, account_id: accounts[0].id }));
     }
-    if (isFallbackAccountId(form.account_id) && accounts.length) {
-      const fallback = fallbackAccounts.find((a) => a.id === form.account_id);
-      const real = fallback ? accounts.find((a) => a.account_name === fallback.account_name) : null;
-      if (real) setForm((f) => ({ ...f, account_id: real.id }));
-    }
-  }, [accountList, accounts, form.account_id]);
+  }, [accounts, form.account_id]);
 
   async function fetchPriceForTicker(ticker: string) {
     try {
@@ -296,6 +281,41 @@ export default function Page() {
     } catch {
       return null;
     }
+  }
+
+  function resetHoldingForm(accountId?: string) {
+    setEditingId(null);
+    setForm({
+      ticker: '',
+      name: '',
+      risk_type: '위험',
+      region: '미국',
+      account_id: accountId || accounts[0]?.id || '',
+      quantity: '',
+      avg_price: '',
+      dividend_yield: '',
+      dividend_cycle: '월',
+    });
+  }
+
+  function editHolding(r: Row) {
+    setOpen(true);
+    setEditingId(r.id || null);
+    const accountId = r.account_id && !isFallbackAccountId(r.account_id)
+      ? r.account_id
+      : accounts.find((a) => a.account_name === r.accountLabel)?.id || accounts[0]?.id || '';
+    setForm({
+      ticker: r.ticker,
+      name: r.name,
+      risk_type: r.risk_type,
+      region: r.region,
+      account_id: accountId,
+      quantity: String(r.quantity || ''),
+      avg_price: String(r.avg_price || ''),
+      dividend_yield: r.dividend_yield ? (Number(r.dividend_yield) * 100).toFixed(2) : '',
+      dividend_cycle: r.dividend_cycle || '월',
+    });
+    setMsg('선택한 종목을 설정 영역에서 수정할 수 있습니다. 저장 시 현재가를 다시 조회합니다.');
   }
 
   async function saveHolding() {
@@ -330,13 +350,15 @@ export default function Page() {
       dividend_yield: fetchedYield ?? normalizeYield(form.dividend_yield),
       dividend_cycle: form.dividend_cycle,
     };
-    const { error } = await supabase.from('holdings').upsert(payload, { onConflict: 'account_id,ticker' });
+    const result = editingId
+      ? await supabase.from('holdings').update(payload).eq('id', editingId)
+      : await supabase.from('holdings').upsert(payload, { onConflict: 'account_id,ticker' });
     setBusy(false);
-    if (error) {
-      setMsg(error.message);
+    if (result.error) {
+      setMsg(result.error.message);
     } else {
-      setForm({ ticker: '', name: '', risk_type: '위험', region: '미국', account_id: realAccount.id || accountList[0]?.id || '', quantity: '', avg_price: '', dividend_yield: '', dividend_cycle: '월' });
-      setMsg(`저장 완료 · 현재가 ${fetchedPrice ? won(fetchedPrice) : '미조회'} · 배당률 ${fetchedYield ? (fetchedYield * 100).toFixed(2) + '% 자동 반영' : '직접 입력값 반영'}`);
+      resetHoldingForm(realAccount.id);
+      setMsg(`${editingId ? '수정' : '저장'} 완료 · 현재가 ${fetchedPrice ? won(fetchedPrice) : '미조회'} · 배당률 ${fetchedYield ? (fetchedYield * 100).toFixed(2) + '% 자동 반영' : '직접 입력값 반영'}`);
       load();
     }
   }
@@ -527,7 +549,7 @@ export default function Page() {
         <div className="sectionHead"><h2>{selectedAccountName} 보유 종목</h2><span className="sub">{rows.length}개 종목</span></div>
         <div className="card tableWrap">
           <table className="table">
-            <thead><tr><th>계좌</th><th>구분</th><th>종목</th><th className="num">수량</th><th className="num">평균단가</th><th className="num">현재가</th><th className="num">평가금액</th><th className="num">손익</th><th className="num">배당</th><th></th></tr></thead>
+            <thead><tr><th>계좌</th><th>구분</th><th>종목</th><th className="num">수량</th><th className="num">평균단가</th><th className="num">현재가</th><th className="num">평가금액</th><th className="num">손익</th><th className="num">배당</th><th className="num">관리</th></tr></thead>
             <tbody>
               {rows.map((r) => (
                 <tr key={r.id || `${r.account_id}-${r.ticker}`}> 
@@ -536,11 +558,11 @@ export default function Page() {
                   <td><b>{r.name}</b><div className="sub">{r.region} · {r.ticker}</div></td>
                   <td className="num">{Number(r.quantity).toLocaleString()}</td>
                   <td className="num">{Math.round(Number(r.avg_price)).toLocaleString()}</td>
-                  <td className="num"><input className="price" inputMode="numeric" placeholder="미조회" value={Number(r.current_price) > 0 ? Math.round(Number(r.current_price)).toLocaleString('ko-KR') : ''} onChange={(e) => changePrice(r, parseNumber(e.target.value))} /></td>
+                  <td className="num">{Number(r.current_price) > 0 ? Math.round(Number(r.current_price)).toLocaleString('ko-KR') : '미조회'}</td>
                   <td className="num"><b>{won(r.value)}</b></td>
                   <td className={'num ' + (!r.hasPrice ? '' : r.pl >= 0 ? 'gain' : 'loss')}><b>{r.hasPrice ? won(r.pl) : '현재가 필요'}</b><div>{r.hasPrice ? pct(r.plRate) : '-'}</div></td>
                   <td className="num">{r.dividend_yield ? `${(Number(r.dividend_yield) * 100).toFixed(2)}% · ${r.dividend_cycle}` : '없음'}</td>
-                  <td><button className="btn" onClick={() => delHolding(r)}><Trash2 size={14}/></button></td>
+                  <td className="num"><div className="rowActions"><button className="btn" onClick={() => editHolding(r)}><Pencil size={14}/> 수정</button><button className="btn" onClick={() => delHolding(r)}><Trash2 size={14}/></button></div></td>
                 </tr>
               ))}
             </tbody>
@@ -592,17 +614,17 @@ export default function Page() {
       <section className={'section settings ' + (open ? 'open' : '')}>
         <div className="sectionHead"><h2>설정</h2></div>
         <div className="card">
-          <div className="toolbar" style={{ justifyContent: 'flex-start', marginBottom: 14 }}><button className="btn" onClick={load}>DB 새로고침</button></div>
+          <div className="toolbar" style={{ justifyContent: 'flex-start', marginBottom: 14 }}><button className="btn" onClick={load}>DB 새로고침</button>{editingId && <button className="btn" onClick={() => resetHoldingForm()}>신규 입력으로 전환</button>}</div>
           <div className="form">
             <input className="input" placeholder="종목코드" value={form.ticker} onChange={(e) => setForm({ ...form, ticker: e.target.value })} />
             <input className="input" placeholder="종목명" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
             <select className="input" value={form.risk_type} onChange={(e) => setForm({ ...form, risk_type: e.target.value })}><option>위험</option><option>안전</option></select>
             <select className="input" value={form.region} onChange={(e) => setForm({ ...form, region: e.target.value })}><option>미국</option><option>한국</option></select>
-            <select className="input" value={form.account_id} onChange={(e) => setForm({ ...form, account_id: e.target.value })}>{accountList.map((a) => <option key={a.id} value={a.id}>{a.account_name}</option>)}</select>
+            <select className="input" value={form.account_id} onChange={(e) => setForm({ ...form, account_id: e.target.value })}>{accounts.map((a) => <option key={a.id} value={a.id}>{a.account_name}</option>)}</select>
             <input className="input" placeholder="수량" value={form.quantity} onChange={(e) => setForm({ ...form, quantity: e.target.value })} />
             <input className="input" placeholder="평균단가" value={form.avg_price} onChange={(e) => setForm({ ...form, avg_price: e.target.value })} />
             <input className="input" type="number" inputMode="decimal" step="0.01" min="0" placeholder="배당률 % 예: 1.15" value={form.dividend_yield} onChange={(e) => setForm({ ...form, dividend_yield: e.target.value })} />
-            <button className="btn green" onClick={saveHolding} disabled={busy}>저장 후 현재가 조회</button>
+            <button className="btn green" onClick={saveHolding} disabled={busy || !accounts.length}>저장 후 현재가 조회</button>
           </div>
         </div>
       </section>

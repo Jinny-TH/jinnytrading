@@ -1,41 +1,14 @@
-# Jinny Trading v13
+# Jinny Trading v15
 
-## 수정 내용
-- 설정 > 종목 추가 시 `fallback-*` 계좌 ID 때문에 저장이 막히던 문제 수정
-- 저장 시 `accounts` 테이블에서 실제 UUID를 다시 조회해서 `holdings.account_id`에 저장
-- 동일 종목을 여러 계좌에 각각 저장하는 구조 유지
+변경 사항:
 
-## 필요한 SQL
-이미 v11/v12 SQL을 실행했다면 추가 SQL은 필요 없습니다.
+- 오늘 시세 업데이트 버튼은 이제 **시세만 업데이트**합니다. 배당률은 별도 `배당률 업데이트` 버튼으로만 갱신됩니다.
+- 보유 종목 표의 `현재가`는 입력 필드가 아니라 평균단가처럼 텍스트/숫자 표시로 변경했습니다.
+- 보유 종목별 `수정` 버튼을 추가했습니다.
+  - 수정 버튼 클릭 시 설정 영역이 열리고 기존 값이 입력됩니다.
+  - 저장 시 현재가를 다시 조회합니다.
+  - 동일 종목을 다른 계좌에 보유해도 각 보유종목 단위로 수정/삭제됩니다.
 
-그래도 계좌 조회 또는 저장 문제가 계속되면 Supabase SQL Editor에서 아래 확인용 SQL을 실행하세요.
+## SQL
 
-```sql
-select id, account_name, broker, account_type, display_order, is_active
-from accounts
-order by display_order;
-```
-
-RLS로 조회가 막히면 개인용 사이트 기준으로 아래를 실행하세요.
-
-```sql
-alter table accounts disable row level security;
-alter table holdings disable row level security;
-alter table dividend_logs disable row level security;
-alter table daily_snapshots disable row level security;
-```
-
-동일 종목을 여러 계좌에 저장하기 위한 인덱스 확인:
-
-```sql
-select indexname, indexdef
-from pg_indexes
-where tablename='holdings';
-```
-
-아래 인덱스가 보여야 합니다.
-
-```sql
-create unique index if not exists holdings_account_ticker_unique
-on holdings(account_id, ticker);
-```
+이번 버전은 DB 구조 변경이 없습니다. 추가 SQL 실행은 필요 없습니다.
