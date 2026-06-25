@@ -67,6 +67,7 @@ const pct = (n: number) => `${n >= 0 ? '+' : ''}${(n * 100).toFixed(2)}%`;
 const parseNumber = (v: unknown) => Number(String(v ?? '').replace(/[^0-9.]/g, '')) || 0;
 const today = () => new Date().toISOString().slice(0, 10);
 const month = () => new Date().toISOString().slice(0, 7);
+const DIVIDEND_CYCLES = ['없음', '월', '분기', '반기', '년'];
 
 function normalizeYield(v: unknown) {
   const n = Number(v || 0);
@@ -98,7 +99,7 @@ export default function Page() {
     quantity: '',
     avg_price: '',
     dividend_yield: '',
-    dividend_cycle: '월',
+    dividend_cycle: '없음',
   });
   const [editingId, setEditingId] = useState<string | null>(null);
   const [div, setDiv] = useState({ dividend_month: month(), ticker: '', amount: '' });
@@ -294,7 +295,7 @@ export default function Page() {
       quantity: '',
       avg_price: '',
       dividend_yield: '',
-      dividend_cycle: '월',
+      dividend_cycle: '없음',
     });
   }
 
@@ -313,7 +314,7 @@ export default function Page() {
       quantity: String(r.quantity || ''),
       avg_price: String(r.avg_price || ''),
       dividend_yield: r.dividend_yield ? (Number(r.dividend_yield) * 100).toFixed(2) : '',
-      dividend_cycle: r.dividend_cycle || '월',
+      dividend_cycle: r.dividend_cycle || (r.dividend_yield ? '월' : '없음'),
     });
     setMsg('선택한 종목을 설정 영역에서 수정할 수 있습니다. 저장 시 현재가를 다시 조회합니다.');
   }
@@ -341,7 +342,8 @@ export default function Page() {
 
     setMsg(isEditing ? '수정 내용 저장 중...' : '종목 저장 중 · 현재가 조회 중...');
     const fetchedPrice = await fetchPriceForTicker(ticker);
-    const manualYield = normalizeYield(form.dividend_yield);
+    const hasDividend = form.dividend_cycle !== '없음';
+    const manualYield = hasDividend ? normalizeYield(form.dividend_yield) : null;
     const payload = {
       ticker,
       name: form.name.trim(),
@@ -352,8 +354,8 @@ export default function Page() {
       quantity: Number(form.quantity || 0),
       avg_price: Number(form.avg_price || 0),
       current_price: fetchedPrice || Number(previous?.current_price || 0),
-      dividend_yield: manualYield ?? (previous ? storedYield(previous.dividend_yield) : null),
-      dividend_cycle: form.dividend_cycle,
+      dividend_yield: hasDividend ? (manualYield ?? (previous && previous.dividend_cycle !== '없음' ? storedYield(previous.dividend_yield) : null)) : null,
+      dividend_cycle: hasDividend ? form.dividend_cycle : '없음',
     };
 
     const result = isEditing
@@ -366,7 +368,7 @@ export default function Page() {
     } else {
       await load();
       resetHoldingForm(realAccount.id);
-      setMsg(`${isEditing ? '수정' : '저장'} 완료 · 현재가 ${fetchedPrice ? won(fetchedPrice) : previous?.current_price ? '기존 현재가 유지' : '미조회'} · 배당률 ${manualYield ? (manualYield * 100).toFixed(2) + '% 반영' : previous ? '기존 배당률 유지' : '미입력'}`);
+      setMsg(`${isEditing ? '수정' : '저장'} 완료 · 현재가 ${fetchedPrice ? won(fetchedPrice) : previous?.current_price ? '기존 현재가 유지' : '미조회'} · 배당 ${hasDividend ? (manualYield ? (manualYield * 100).toFixed(2) + '% · ' + form.dividend_cycle : '주기만 저장') : '없음'}`);
     }
   }
 
@@ -454,12 +456,14 @@ export default function Page() {
     setBusy(true);
     setMsg('배당률 자동 조회 중...');
     try {
-      const codes = rows.map((r) => r.ticker).join(',');
+      const dividendRows = rows.filter((r) => r.dividend_cycle !== '없음');
+      const codes = dividendRows.map((r) => r.ticker).join(',');
+      if (!codes) { setMsg('배당률 업데이트 대상 종목이 없습니다.'); setBusy(false); return; }
       const res = await fetch('/api/dividends?codes=' + encodeURIComponent(codes));
       const json = await res.json();
       let count = 0;
       const missed: string[] = [];
-      for (const r of rows) {
+      for (const r of dividendRows) {
         const y = Number(json.yields?.[r.ticker]);
         if (y > 0) {
           count += 1;
@@ -560,7 +564,7 @@ export default function Page() {
                   <td className="num"><span className="plainPrice">{Number(r.current_price) > 0 ? Math.round(Number(r.current_price)).toLocaleString('ko-KR') : '미조회'}</span></td>
                   <td className="num"><b>{won(r.value)}</b></td>
                   <td className={'num ' + (!r.hasPrice ? '' : r.pl >= 0 ? 'gain' : 'loss')}><b>{r.hasPrice ? won(r.pl) : '현재가 필요'}</b><div>{r.hasPrice ? pct(r.plRate) : '-'}</div></td>
-                  <td className="num">{r.dividend_yield ? `${(Number(r.dividend_yield) * 100).toFixed(2)}% · ${r.dividend_cycle}` : '없음'}</td>
+                  <td className="num">{r.dividend_cycle !== '없음' && r.dividend_yield ? `${(Number(r.dividend_yield) * 100).toFixed(2)}% · ${r.dividend_cycle}` : '없음'}</td>
                   <td className="num"><div className="rowActions"><button className="btn" onClick={() => editHolding(r)}><Pencil size={14}/> 수정</button><button className="btn" onClick={() => delHolding(r)}><Trash2 size={14}/></button></div></td>
                 </tr>
               ))}
@@ -630,7 +634,10 @@ export default function Page() {
             <select className="input" value={form.account_id} onChange={(e) => setForm({ ...form, account_id: e.target.value })}>{accounts.map((a) => <option key={a.id} value={a.id}>{a.account_name}</option>)}</select>
             <input className="input" placeholder="수량" value={form.quantity} onChange={(e) => setForm({ ...form, quantity: e.target.value })} />
             <input className="input" placeholder="평균단가" value={form.avg_price} onChange={(e) => setForm({ ...form, avg_price: e.target.value })} />
-            <input className="input" type="number" inputMode="decimal" step="0.01" min="0" placeholder="배당률 % 예: 1.15" value={form.dividend_yield} onChange={(e) => setForm({ ...form, dividend_yield: e.target.value })} />
+            <select className="input" value={form.dividend_cycle} onChange={(e) => setForm({ ...form, dividend_cycle: e.target.value, dividend_yield: e.target.value === '없음' ? '' : form.dividend_yield })}>
+              {DIVIDEND_CYCLES.map((cycle) => <option key={cycle} value={cycle}>{cycle}</option>)}
+            </select>
+            <input className="input" type="number" inputMode="decimal" step="0.01" min="0" placeholder={form.dividend_cycle === '없음' ? '배당 없음' : '배당률 % 예: 1.15'} value={form.dividend_yield} disabled={form.dividend_cycle === '없음'} onChange={(e) => setForm({ ...form, dividend_yield: e.target.value })} />
             <button className="btn green" onClick={saveHolding} disabled={busy || !accounts.length}>{editingId ? '수정 저장' : '저장 후 현재가 조회'}</button>
           </div>
         </div>
