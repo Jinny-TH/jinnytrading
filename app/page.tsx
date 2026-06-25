@@ -324,6 +324,10 @@ export default function Page() {
       setMsg('종목코드와 종목명을 입력해주세요.');
       return;
     }
+
+    const isEditing = Boolean(editingId);
+    const previous = isEditing ? holdings.find((h) => h.id === editingId) : null;
+
     setBusy(true);
     setMsg('계좌 확인 중...');
     let realAccount: Account;
@@ -335,8 +339,9 @@ export default function Page() {
       return;
     }
 
-    setMsg('종목 저장 중 · 현재가 조회 중...');
-    const [fetchedPrice, fetchedYield] = await Promise.all([fetchPriceForTicker(ticker), fetchYieldForTicker(ticker)]);
+    setMsg(isEditing ? '수정 내용 저장 중...' : '종목 저장 중 · 현재가 조회 중...');
+    const fetchedPrice = await fetchPriceForTicker(ticker);
+    const manualYield = normalizeYield(form.dividend_yield);
     const payload = {
       ticker,
       name: form.name.trim(),
@@ -346,20 +351,22 @@ export default function Page() {
       account_name: realAccount.account_name,
       quantity: Number(form.quantity || 0),
       avg_price: Number(form.avg_price || 0),
-      current_price: fetchedPrice || 0,
-      dividend_yield: fetchedYield ?? normalizeYield(form.dividend_yield),
+      current_price: fetchedPrice || Number(previous?.current_price || 0),
+      dividend_yield: manualYield ?? (previous ? storedYield(previous.dividend_yield) : null),
       dividend_cycle: form.dividend_cycle,
     };
-    const result = editingId
+
+    const result = isEditing
       ? await supabase.from('holdings').update(payload).eq('id', editingId)
       : await supabase.from('holdings').upsert(payload, { onConflict: 'account_id,ticker' });
+
     setBusy(false);
     if (result.error) {
       setMsg(result.error.message);
     } else {
+      await load();
       resetHoldingForm(realAccount.id);
-      setMsg(`${editingId ? '수정' : '저장'} 완료 · 현재가 ${fetchedPrice ? won(fetchedPrice) : '미조회'} · 배당률 ${fetchedYield ? (fetchedYield * 100).toFixed(2) + '% 자동 반영' : '직접 입력값 반영'}`);
-      load();
+      setMsg(`${isEditing ? '수정' : '저장'} 완료 · 현재가 ${fetchedPrice ? won(fetchedPrice) : previous?.current_price ? '기존 현재가 유지' : '미조회'} · 배당률 ${manualYield ? (manualYield * 100).toFixed(2) + '% 반영' : previous ? '기존 배당률 유지' : '미입력'}`);
     }
   }
 
@@ -616,7 +623,7 @@ export default function Page() {
             <input className="input" placeholder="수량" value={form.quantity} onChange={(e) => setForm({ ...form, quantity: e.target.value })} />
             <input className="input" placeholder="평균단가" value={form.avg_price} onChange={(e) => setForm({ ...form, avg_price: e.target.value })} />
             <input className="input" type="number" inputMode="decimal" step="0.01" min="0" placeholder="배당률 % 예: 1.15" value={form.dividend_yield} onChange={(e) => setForm({ ...form, dividend_yield: e.target.value })} />
-            <button className="btn green" onClick={saveHolding} disabled={busy || !accounts.length}>저장 후 현재가 조회</button>
+            <button className="btn green" onClick={saveHolding} disabled={busy || !accounts.length}>{editingId ? '수정 저장' : '저장 후 현재가 조회'}</button>
           </div>
         </div>
       </section>
