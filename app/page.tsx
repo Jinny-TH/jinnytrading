@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../lib/supabase';
-import { RefreshCw, Settings, Plus, Save, Trash2, Percent, Pencil } from 'lucide-react';
+import { RefreshCw, Settings, Plus, Save, Trash2, Pencil } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, LabelList } from 'recharts';
 
 type Account = {
@@ -63,6 +63,12 @@ const fallbackAccounts: Account[] = [
 ];
 
 const won = (n: number) => Math.round(n || 0).toLocaleString('ko-KR') + '원';
+const compactWon = (n: number) => {
+  const value = Math.round(n || 0);
+  if (Math.abs(value) >= 100000000) return (value / 100000000).toFixed(1).replace(/\.0$/, '') + '억';
+  if (Math.abs(value) >= 10000) return Math.round(value / 10000).toLocaleString('ko-KR') + '만';
+  return value.toLocaleString('ko-KR');
+};
 const pct = (n: number) => `${n >= 0 ? '+' : ''}${(n * 100).toFixed(2)}%`;
 const parseNumber = (v: unknown) => Number(String(v ?? '').replace(/[^0-9.]/g, '')) || 0;
 const today = () => new Date().toISOString().slice(0, 10);
@@ -452,32 +458,7 @@ export default function Page() {
     }
   }
 
-  async function updateDividendYields() {
-    setBusy(true);
-    setMsg('배당률 자동 조회 중...');
-    try {
-      const dividendRows = rows.filter((r) => r.dividend_cycle !== '없음');
-      const codes = dividendRows.map((r) => r.ticker).join(',');
-      if (!codes) { setMsg('배당률 업데이트 대상 종목이 없습니다.'); setBusy(false); return; }
-      const res = await fetch('/api/dividends?codes=' + encodeURIComponent(codes));
-      const json = await res.json();
-      let count = 0;
-      const missed: string[] = [];
-      for (const r of dividendRows) {
-        const y = Number(json.yields?.[r.ticker]);
-        if (y > 0) {
-          count += 1;
-          await supabase.from('holdings').update({ dividend_yield: y }).eq('id', r.id);
-        } else missed.push(r.ticker);
-      }
-      setMsg(`${count}개 종목 배당률 갱신 완료${missed.length ? ` · 미조회: ${missed.join(', ')}` : ''}`);
-      await load();
-    } catch (e: any) {
-      setMsg('배당률 조회 실패: ' + e.message);
-    } finally {
-      setBusy(false);
-    }
-  }
+
 
   const byMonth = useMemo(() => filteredLogs.reduce((m: Record<string, number>, l) => {
     m[l.dividend_month] = (m[l.dividend_month] || 0) + Number(l.amount);
@@ -490,6 +471,11 @@ export default function Page() {
     return h ? `${h.name} · ${ticker}` : ticker;
   };
 
+  const latestSnap = filteredSnaps.length ? filteredSnaps[filteredSnaps.length - 1] : null;
+  const previousSnap = filteredSnaps.length > 1 ? filteredSnaps[filteredSnaps.length - 2] : null;
+  const chartDiff = latestSnap && previousSnap ? Number(latestSnap.total_value || 0) - Number(previousSnap.total_value || 0) : 0;
+  const chartDiffRate = previousSnap?.total_value ? chartDiff / Number(previousSnap.total_value) : 0;
+
   return (
     <main className="wrap">
       <header className="hero">
@@ -501,7 +487,6 @@ export default function Page() {
         <div className="toolbar">
           <button className="btn blue" onClick={updatePrices} disabled={busy}><RefreshCw size={15}/> 오늘 시세 업데이트</button>
           <button className="btn green" onClick={saveSnapshot}><Save size={15}/> 오늘 기록 저장</button>
-          <button className="btn" onClick={updateDividendYields} disabled={busy}><Percent size={15}/> 배당률 업데이트</button>
           <button className="btn" onClick={() => setOpen(!open)}><Settings size={15}/> 설정</button>
         </div>
       </header>
@@ -563,7 +548,7 @@ export default function Page() {
                   <td className="num">{Math.round(Number(r.avg_price)).toLocaleString()}</td>
                   <td className="num"><span className="plainPrice">{Number(r.current_price) > 0 ? Math.round(Number(r.current_price)).toLocaleString('ko-KR') : '미조회'}</span></td>
                   <td className="num"><b>{won(r.value)}</b></td>
-                  <td className={'num ' + (!r.hasPrice ? '' : r.pl >= 0 ? 'gain' : 'loss')}><b>{r.hasPrice ? won(r.pl) : '현재가 필요'}</b><div>{r.hasPrice ? pct(r.plRate) : '-'}</div></td>
+                  <td className={'num profitCell ' + (!r.hasPrice ? '' : r.pl >= 0 ? 'gain' : 'loss')}><div className="profitValues"><span className="profitRate">{r.hasPrice ? pct(r.plRate) : '-'}</span><b>{r.hasPrice ? won(r.pl) : '현재가 필요'}</b></div></td>
                   <td className="num">{r.dividend_cycle !== '없음' && r.dividend_yield ? `${(Number(r.dividend_yield) * 100).toFixed(2)}% · ${r.dividend_cycle}` : '없음'}</td>
                   <td className="num"><div className="rowActions"><button className="btn" onClick={() => editHolding(r)}><Pencil size={14}/> 수정</button><button className="btn" onClick={() => delHolding(r)}><Trash2 size={14}/></button></div></td>
                 </tr>
@@ -605,19 +590,40 @@ export default function Page() {
 
       <section className="section">
         <div className="sectionHead"><h2>{selectedAccountName} 일별 자산 추이</h2><span className="sub">{filteredSnaps.length}일 기록</span></div>
-        <div className="card chart">
+        <div className="card chartCard">
           {filteredSnaps.length > 1 ? (
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={filteredSnaps} margin={{ top: 28, right: 16, left: 16, bottom: 4 }}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false}/>
-                <XAxis dataKey="snapshot_date"/>
-                <YAxis hide domain={[0, 'dataMax']}/>
-                <Tooltip formatter={(v: any) => won(Number(v))}/>
-                <Bar dataKey="total_value" radius={[10, 10, 0, 0]}>
-                  <LabelList dataKey="total_value" position="top" formatter={(v: any) => won(Number(v))} style={{ fontSize: 12, fontWeight: 800, fill: '#101828' }}/>
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
+            <>
+              <div className="chartSummary">
+                <div>
+                  <span>최근 평가금</span>
+                  <b>{won(Number(latestSnap?.total_value || 0))}</b>
+                </div>
+                <div className={chartDiff >= 0 ? 'gain' : 'loss'}>
+                  <span>전일 대비</span>
+                  <b>{chartDiff >= 0 ? '+' : ''}{won(chartDiff)}</b>
+                  <em>{pct(chartDiffRate)}</em>
+                </div>
+              </div>
+              <div className="chart">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={filteredSnaps} margin={{ top: 34, right: 8, left: 8, bottom: 2 }}>
+                    <defs>
+                      <linearGradient id="assetBarGradient" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#0a7cff" stopOpacity={0.96}/>
+                        <stop offset="100%" stopColor="#20c06b" stopOpacity={0.82}/>
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 5" vertical={false} stroke="#e7ebf2"/>
+                    <XAxis dataKey="snapshot_date" tick={{ fontSize: 11, fill: '#667085' }} tickLine={false} axisLine={false}/>
+                    <YAxis hide domain={[0, 'dataMax']}/>
+                    <Tooltip content={<AssetTooltip />} cursor={{ fill: 'rgba(10,124,255,.07)' }}/>
+                    <Bar dataKey="total_value" fill="url(#assetBarGradient)" radius={[12, 12, 4, 4]} barSize={42}>
+                      <LabelList dataKey="total_value" position="top" formatter={(v: any) => compactWon(Number(v))} className="barLabel"/>
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </>
           ) : <span className="sub">선택한 계좌의 기록이 2일 이상 저장되면 그래프가 표시됩니다.</span>}
         </div>
       </section>
@@ -643,6 +649,16 @@ export default function Page() {
         </div>
       </section>
     </main>
+  );
+}
+
+function AssetTooltip({ active, payload, label }: any) {
+  if (!active || !payload?.length) return null;
+  return (
+    <div className="assetTooltip">
+      <span>{label}</span>
+      <b>{won(Number(payload[0].value || 0))}</b>
+    </div>
   );
 }
 

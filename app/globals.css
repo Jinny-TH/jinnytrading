@@ -30,3 +30,10 @@ button{touch-action:manipulation}
 }
 
 @media(max-width:380px){.toolbar{grid-template-columns:1fr}.dashMetrics{grid-template-columns:1fr}.title{font-size:28px}.card{padding:13px}.table tr{padding:9px 11px}}
+
+/* v22 polish: mobile profit row + refined asset chart */
+.profitCell .profitValues{display:grid;gap:2px;justify-items:end;font-variant-numeric:tabular-nums}.profitRate{font-size:12px;font-weight:800}.chartCard{padding:18px 18px 14px}.chartSummary{display:grid;grid-template-columns:1fr auto;gap:12px;align-items:start;margin-bottom:12px}.chartSummary div{background:#f8fafc;border:1px solid var(--line);border-radius:16px;padding:12px 14px;min-width:0}.chartSummary span{display:block;color:var(--muted);font-size:11px;font-weight:900;margin-bottom:6px}.chartSummary b{display:block;font-size:21px;line-height:1.05;letter-spacing:-.04em}.chartSummary em{display:block;font-style:normal;font-size:12px;font-weight:800;margin-top:4px}.barLabel{font-size:12px;font-weight:900;fill:#101828}.assetTooltip{background:#fff;border:1px solid var(--line);border-radius:14px;padding:10px 12px;box-shadow:0 12px 30px rgba(16,24,40,.14);display:grid;gap:4px}.assetTooltip span{font-size:11px;color:var(--muted);font-weight:800}.assetTooltip b{font-size:14px;color:var(--ink)}
+
+@media(max-width:680px){
+  .table td.profitCell{display:block;border:1px solid rgba(255,59,48,.24);background:linear-gradient(180deg,rgba(255,59,48,.035),rgba(255,255,255,.2));border-radius:14px;padding:10px 12px;margin:3px 0}.table td.profitCell::before{content:'손익';display:block;margin-bottom:8px}.profitCell .profitValues{display:flex;flex-direction:row;align-items:baseline;justify-content:space-between;gap:12px;width:100%}.profitCell .profitRate{order:1;font-size:17px;font-weight:950;letter-spacing:-.02em}.profitCell b{order:2;font-size:15px;font-weight:900;text-align:right}.chartCard{padding:14px}.chartSummary{grid-template-columns:1fr;gap:8px;margin-bottom:6px}.chartSummary div{padding:11px 12px;border-radius:15px}.chartSummary b{font-size:20px}.chart{height:280px}.barLabel{font-size:10px}.assetTooltip{padding:9px 10px}
+}
