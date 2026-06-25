@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 
 type Account = { id: string; account_name: string };
 type Holding = {
+  id?: string;
   ticker: string;
   account_id?: string | null;
   account_name?: string | null;
@@ -91,7 +92,8 @@ export async function GET() {
     if (price) {
       updatedCount += 1;
       h.current_price = price;
-      await supabase.from('holdings').update({ current_price: price }).eq('ticker', h.ticker);
+      if (h.id) await supabase.from('holdings').update({ current_price: price }).eq('id', h.id);
+      else await supabase.from('holdings').update({ current_price: price }).eq('ticker', h.ticker).eq('account_id', h.account_id || '');
     } else {
       missed.push(h.ticker);
     }
@@ -109,7 +111,7 @@ export async function GET() {
   // 계좌 테이블에 아직 매핑되지 않은 과거 데이터도 누락 없이 저장합니다.
   const legacyNames = Array.from(new Set(holdings.filter((h) => !h.account_id && h.account_name).map((h) => h.account_name as string)));
   for (const name of legacyNames) {
-    if ([...accountNameById.values()].includes(name)) continue;
+    if (Array.from(accountNameById.values()).includes(name)) continue;
     const accountHoldings = holdings.filter((h) => !h.account_id && h.account_name === name);
     snapshots.push(calcSnapshot(accountHoldings, name, null));
   }

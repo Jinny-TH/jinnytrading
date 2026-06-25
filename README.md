@@ -1,13 +1,14 @@
-# Jinny Trading v17
+# Jinny Trading v18
 
-## 반영 내용
-- Vercel `npm install` 실패 원인인 `package-lock.json` 제거
-- `package.json` 버전 고정
-- 보유 종목 수정 저장 로직 보강
-- 수정 저장 시 기존 현재가/배당률이 불필요하게 0으로 덮이지 않도록 수정
-- 수정 모드 버튼 문구를 `수정 저장`으로 변경
-- 오늘 시세 업데이트는 시세만 업데이트 유지
-- 보유 종목 현재가는 입력필드가 아닌 텍스트 표시 유지
+수정 내용:
 
-## SQL
-추가 SQL 없음.
+- Vercel 빌드 오류 수정: `app/api/daily-snapshot/route.ts`의 Map iterator 문법 제거
+- TypeScript target을 `es2017`로 조정
+- 자동 일별 스냅샷 시세 업데이트도 보유종목 `id` 기준으로 처리
+- v17 기능 유지:
+  - 오늘 시세 업데이트는 시세만 갱신
+  - 배당률은 별도 버튼으로 갱신
+  - 현재가 입력필드 제거
+  - 종목별 수정 버튼 및 수정 저장
+
+추가 SQL은 없습니다.
