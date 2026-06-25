@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { RefreshCw, Settings, Plus, Save, Trash2, Percent, Pencil } from 'lucide-react';
-import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, LabelList } from 'recharts';
 
 type Account = {
   id: string;
@@ -604,7 +604,15 @@ export default function Page() {
         <div className="card chart">
           {filteredSnaps.length > 1 ? (
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={filteredSnaps}><CartesianGrid strokeDasharray="3 3"/><XAxis dataKey="snapshot_date"/><YAxis hide domain={['dataMin', 'dataMax']}/><Tooltip formatter={(v: any) => won(Number(v))}/><Line type="monotone" dataKey="total_value" strokeWidth={3} dot={false}/></LineChart>
+              <BarChart data={filteredSnaps} margin={{ top: 28, right: 16, left: 16, bottom: 4 }}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false}/>
+                <XAxis dataKey="snapshot_date"/>
+                <YAxis hide domain={[0, 'dataMax']}/>
+                <Tooltip formatter={(v: any) => won(Number(v))}/>
+                <Bar dataKey="total_value" radius={[10, 10, 0, 0]}>
+                  <LabelList dataKey="total_value" position="top" formatter={(v: any) => won(Number(v))} style={{ fontSize: 12, fontWeight: 800, fill: '#101828' }}/>
+                </Bar>
+              </BarChart>
             </ResponsiveContainer>
           ) : <span className="sub">선택한 계좌의 기록이 2일 이상 저장되면 그래프가 표시됩니다.</span>}
         </div>
