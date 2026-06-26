@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { RefreshCw, Settings, Plus, Save, Trash2, Pencil } from 'lucide-react';
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, LabelList } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, LabelList, PieChart, Pie, Cell } from 'recharts';
 
 type Account = {
   id: string;
@@ -74,6 +74,7 @@ const parseNumber = (v: unknown) => Number(String(v ?? '').replace(/[^0-9.]/g, '
 const today = () => new Date().toISOString().slice(0, 10);
 const month = () => new Date().toISOString().slice(0, 7);
 const DIVIDEND_CYCLES = ['없음', '월', '분기', '반기', '년'];
+const CHART_COLORS = ['#0a7cff', '#24b26b', '#ff9f0a', '#af52de', '#ff3b30', '#00c7be', '#5856d6', '#34c759', '#ffcc00', '#5ac8fa'];
 
 function normalizeYield(v: unknown) {
   const n = Number(v || 0);
@@ -476,6 +477,16 @@ export default function Page() {
   const chartDiff = latestSnap && previousSnap ? Number(latestSnap.total_value || 0) - Number(previousSnap.total_value || 0) : 0;
   const chartDiffRate = previousSnap?.total_value ? chartDiff / Number(previousSnap.total_value) : 0;
 
+  const allocationRows = useMemo(() => {
+    const sorted = [...rows].filter((r) => r.value > 0).sort((a, b) => b.value - a.value);
+    const top = sorted.slice(0, 8).map((r) => ({ name: r.name, ticker: r.ticker, value: r.value, share: totals.value ? r.value / totals.value : 0 }));
+    const etcValue = sorted.slice(8).reduce((sum, r) => sum + r.value, 0);
+    return etcValue > 0 ? [...top, { name: '기타', ticker: 'ETC', value: etcValue, share: totals.value ? etcValue / totals.value : 0 }] : top;
+  }, [rows, totals.value]);
+
+  const topGainer = useMemo(() => rows.filter((r) => r.hasPrice).sort((a, b) => b.plRate - a.plRate)[0], [rows]);
+  const topLoser = useMemo(() => rows.filter((r) => r.hasPrice).sort((a, b) => a.plRate - b.plRate)[0], [rows]);
+
   return (
     <main className="wrap">
       <header className="hero">
@@ -530,6 +541,40 @@ export default function Page() {
               <div className="sub">월 예상 배당 {won(a.monthly)}</div>
             </div>
           ))}
+        </div>
+      </section>
+
+      <section className="section insightsSection">
+        <div className="sectionHead"><h2>{selectedAccountName} 투자 요약</h2><span className="sub">비중과 수익률을 한눈에 확인합니다.</span></div>
+        <div className="grid insightGrid">
+          <div className="card todayCard">
+            <div className="metricLabel">오늘의 투자 현황</div>
+            <div className="todayValue">{won(totals.value)}</div>
+            <div className={totals.profit >= 0 ? 'gain todayChange' : 'loss todayChange'}>{won(totals.profit)} · {pct(totals.rate)}</div>
+            <div className="todayMiniGrid">
+              <div><span>최고 수익률</span><b>{topGainer ? topGainer.name : '-'}</b><em className={topGainer && topGainer.plRate >= 0 ? 'gain' : 'loss'}>{topGainer ? pct(topGainer.plRate) : '-'}</em></div>
+              <div><span>최저 수익률</span><b>{topLoser ? topLoser.name : '-'}</b><em className={topLoser && topLoser.plRate >= 0 ? 'gain' : 'loss'}>{topLoser ? pct(topLoser.plRate) : '-'}</em></div>
+            </div>
+          </div>
+          <div className="card allocationCard">
+            <div className="allocationHead"><div><div className="metricLabel">ETF 자산 비중</div><b>{allocationRows.length}개 그룹</b></div><span>{selectedAccountName}</span></div>
+            {allocationRows.length ? <div className="allocationBody">
+              <div className="donutWrap">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie data={allocationRows} dataKey="value" nameKey="name" innerRadius="62%" outerRadius="88%" paddingAngle={2} stroke="none">
+                      {allocationRows.map((_, i) => <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />)}
+                    </Pie>
+                    <Tooltip formatter={(v: any) => won(Number(v))}/>
+                  </PieChart>
+                </ResponsiveContainer>
+                <div className="donutCenter"><span>총 평가금</span><b>{compactWon(totals.value)}</b></div>
+              </div>
+              <div className="allocationList">
+                {allocationRows.map((r, i) => <div key={`${r.ticker}-${i}`} className="allocationRow"><span style={{ background: CHART_COLORS[i % CHART_COLORS.length] }} /><div><b>{r.name}</b><em>{r.ticker}</em></div><strong>{(r.share * 100).toFixed(1)}%</strong></div>)}
+              </div>
+            </div> : <div className="sub">보유 종목 데이터가 있으면 자산 비중이 표시됩니다.</div>}
+          </div>
         </div>
       </section>
 
