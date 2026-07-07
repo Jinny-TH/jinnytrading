@@ -109,6 +109,8 @@ export default function Page() {
     dividend_cycle: '없음',
   });
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [buyTarget, setBuyTarget] = useState<Row | null>(null);
+  const [buyForm, setBuyForm] = useState({ quantity: '', price: '' });
   const [div, setDiv] = useState({ dividend_month: month(), ticker: '', amount: '' });
 
   const accountList = useMemo(() => {
@@ -392,6 +394,65 @@ export default function Page() {
     else await supabase.from('holdings').update({ current_price: price }).eq('ticker', r.ticker).eq('account_id', r.account_id || '');
   }
 
+  function openAdditionalBuy(r: Row) {
+    setBuyTarget(r);
+    setBuyForm({ quantity: '', price: Number(r.current_price) > 0 ? Math.round(Number(r.current_price)).toLocaleString('ko-KR') : '' });
+    setMsg(`${r.name} 추가매수 정보를 입력해주세요.`);
+  }
+
+  function closeAdditionalBuy() {
+    setBuyTarget(null);
+    setBuyForm({ quantity: '', price: '' });
+  }
+
+  async function saveAdditionalBuy() {
+    if (!buyTarget?.id) {
+      setMsg('보유종목 ID를 찾지 못했습니다. 새로고침 후 다시 시도해주세요.');
+      return;
+    }
+    const addQty = parseNumber(buyForm.quantity);
+    const buyPrice = parseNumber(buyForm.price);
+    if (addQty <= 0 || buyPrice <= 0) {
+      setMsg('추가수량과 매수단가를 올바르게 입력해주세요.');
+      return;
+    }
+
+    const oldQty = Number(buyTarget.quantity || 0);
+    const oldAvg = Number(buyTarget.avg_price || 0);
+    const newQty = oldQty + addQty;
+    const newAvg = newQty > 0 ? ((oldQty * oldAvg) + (addQty * buyPrice)) / newQty : oldAvg;
+
+    setBusy(true);
+    setMsg('추가매수 반영 중...');
+    const { error: updateError } = await supabase
+      .from('holdings')
+      .update({ quantity: newQty, avg_price: newAvg })
+      .eq('id', buyTarget.id);
+
+    if (updateError) {
+      setBusy(false);
+      setMsg(updateError.message);
+      return;
+    }
+
+    const { error: txError } = await supabase.from('transactions').insert({
+      holding_id: buyTarget.id,
+      trade_date: today(),
+      trade_type: 'BUY',
+      quantity: addQty,
+      price: buyPrice,
+    });
+
+    setBusy(false);
+    closeAdditionalBuy();
+    await load();
+    if (txError) {
+      setMsg(`추가매수는 반영됐지만 거래내역 저장에 실패했습니다: ${txError.message}`);
+    } else {
+      setMsg(`추가매수 반영 완료 · 총 ${newQty.toLocaleString('ko-KR')}주 · 평균단가 ${Math.round(newAvg).toLocaleString('ko-KR')}원`);
+    }
+  }
+
   async function saveSnapshot() {
     const payload = {
       snapshot_date: today(),
@@ -486,6 +547,14 @@ export default function Page() {
 
   const topGainer = useMemo(() => rows.filter((r) => r.hasPrice).sort((a, b) => b.plRate - a.plRate)[0], [rows]);
   const topLoser = useMemo(() => rows.filter((r) => r.hasPrice).sort((a, b) => a.plRate - b.plRate)[0], [rows]);
+
+  const addBuyQty = parseNumber(buyForm.quantity);
+  const addBuyPrice = parseNumber(buyForm.price);
+  const addBuyAmount = addBuyQty * addBuyPrice;
+  const previewOldQty = Number(buyTarget?.quantity || 0);
+  const previewOldAvg = Number(buyTarget?.avg_price || 0);
+  const previewNewQty = previewOldQty + addBuyQty;
+  const previewNewAvg = previewNewQty > 0 ? ((previewOldQty * previewOldAvg) + addBuyAmount) / previewNewQty : previewOldAvg;
 
   return (
     <main className="wrap">
@@ -595,7 +664,7 @@ export default function Page() {
                   <td className="num"><b>{won(r.value)}</b></td>
                   <td className={'num profitCell ' + (!r.hasPrice ? '' : r.pl >= 0 ? 'gain' : 'loss')}><div className="profitValues"><span className="profitRate">{r.hasPrice ? pct(r.plRate) : '-'}</span><b>{r.hasPrice ? won(r.pl) : '현재가 필요'}</b></div></td>
                   <td className="num">{r.dividend_cycle !== '없음' && r.dividend_yield ? `${(Number(r.dividend_yield) * 100).toFixed(2)}% · ${r.dividend_cycle}` : '없음'}</td>
-                  <td className="num"><div className="rowActions"><button className="btn" onClick={() => editHolding(r)}><Pencil size={14}/> 수정</button><button className="btn" onClick={() => delHolding(r)}><Trash2 size={14}/></button></div></td>
+                  <td className="num"><div className="rowActions"><button className="btn" onClick={() => openAdditionalBuy(r)}><Plus size={14}/> 추가매수</button><button className="btn" onClick={() => editHolding(r)}><Pencil size={14}/> 정보수정</button><button className="btn" onClick={() => delHolding(r)}><Trash2 size={14}/></button></div></td>
                 </tr>
               ))}
             </tbody>
@@ -693,6 +762,43 @@ export default function Page() {
           </div>
         </div>
       </section>
+
+      {buyTarget && (
+        <div className="modalBackdrop" onClick={closeAdditionalBuy}>
+          <div className="tradeModal" onClick={(e) => e.stopPropagation()}>
+            <div className="tradeHead">
+              <div>
+                <div className="metricLabel">추가매수</div>
+                <h3>{buyTarget.name}</h3>
+                <p>{buyTarget.accountLabel} · {buyTarget.ticker}</p>
+              </div>
+              <button className="btn" onClick={closeAdditionalBuy}>닫기</button>
+            </div>
+
+            <div className="tradeCurrent">
+              <div><span>현재수량</span><b>{Number(buyTarget.quantity).toLocaleString('ko-KR')}주</b></div>
+              <div><span>평균단가</span><b>{Math.round(Number(buyTarget.avg_price)).toLocaleString('ko-KR')}원</b></div>
+            </div>
+
+            <div className="tradeInputs">
+              <label>추가수량<input className="input" inputMode="decimal" placeholder="예: 10" value={buyForm.quantity} onChange={(e) => setBuyForm({ ...buyForm, quantity: e.target.value })}/></label>
+              <label>매수단가<input className="input" inputMode="numeric" placeholder="예: 25,400" value={buyForm.price} onChange={(e) => setBuyForm({ ...buyForm, price: e.target.value })}/></label>
+            </div>
+
+            <div className="tradePreview">
+              <div><span>이번 매수금액</span><b>{won(addBuyAmount)}</b></div>
+              <div><span>총수량</span><b>{previewNewQty.toLocaleString('ko-KR')}주</b></div>
+              <div><span>새 평균단가</span><b>{Math.round(previewNewAvg).toLocaleString('ko-KR')}원</b></div>
+            </div>
+
+            <div className="tradeActions">
+              <button className="btn" onClick={closeAdditionalBuy}>취소</button>
+              <button className="btn green" onClick={saveAdditionalBuy} disabled={busy}>추가매수 반영</button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </main>
   );
 }
