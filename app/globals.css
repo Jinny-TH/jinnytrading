@@ -47,3 +47,18 @@ button{touch-action:manipulation}
 /* v24 transaction modal */
 .modalBackdrop{position:fixed;inset:0;background:rgba(15,23,42,.38);backdrop-filter:blur(8px);z-index:80;display:flex;align-items:center;justify-content:center;padding:18px}.tradeModal{width:min(520px,100%);background:#fff;border:1px solid var(--line);border-radius:24px;box-shadow:0 28px 90px rgba(16,24,40,.26);padding:20px;display:grid;gap:16px}.tradeHead{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}.tradeHead h3{margin:2px 0 4px;font-size:21px;line-height:1.25;letter-spacing:-.04em}.tradeHead p{margin:0;color:var(--muted);font-size:12px}.tradeCurrent,.tradePreview{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}.tradePreview{grid-template-columns:repeat(3,1fr)}.tradeCurrent>div,.tradePreview>div{background:#f8fafc;border:1px solid var(--line);border-radius:17px;padding:12px}.tradeCurrent span,.tradePreview span{display:block;color:var(--muted);font-size:11px;font-weight:900;margin-bottom:6px}.tradeCurrent b,.tradePreview b{font-size:17px;font-weight:950;letter-spacing:-.035em}.tradeInputs{display:grid;grid-template-columns:1fr 1fr;gap:10px}.tradeInputs label{display:grid;gap:7px;color:var(--muted);font-size:12px;font-weight:900}.tradeActions{display:flex;justify-content:flex-end;gap:9px}.rowActions{flex-wrap:wrap}
 @media(max-width:680px){.modalBackdrop{align-items:flex-end;padding:10px}.tradeModal{border-radius:24px 24px 18px 18px;padding:17px}.tradeHead h3{font-size:18px}.tradeCurrent,.tradePreview,.tradeInputs{grid-template-columns:1fr}.tradeActions{display:grid;grid-template-columns:1fr 1fr}.tradeActions .btn{width:100%;min-height:46px}.rowActions{justify-content:stretch}.rowActions .btn{flex:1 1 auto}}
+
+/* v25: 실제 수령 배당률 표시 */
+.dividendAmountBlock{display:flex;flex-direction:column;align-items:flex-end;gap:3px;font-variant-numeric:tabular-nums}
+.dividendAmountBlock small,.dividendDetailAmount small{font-size:11px;color:var(--muted);font-weight:750;white-space:nowrap}
+.dividendDetailAmount{display:flex;align-items:center;justify-content:flex-end;gap:10px}
+.dividendDetailAmount>span{display:flex;flex-direction:column;align-items:flex-end;gap:2px;font-variant-numeric:tabular-nums}
+.dividendSummaryRow{padding:13px 0}
+@media(max-width:640px){
+  .dividendSummaryRow,.dividendDetailRow{gap:10px}
+  .dividendDetailAmount{gap:7px}
+  .dividendDetailAmount .btn{padding:7px 10px;min-height:36px}
+  .dividendAmountBlock small,.dividendDetailAmount small{font-size:10px}
+}
+
+.monthlyDividendRate{color:#0a9b63!important;font-weight:800!important;letter-spacing:-.01em}

@@ -686,8 +686,31 @@ export default function Page() {
               <button className="btn primary" onClick={addDividend}><Plus size={15}/> 추가</button>
             </div>
             <div className="miniList" style={{ marginTop: 14 }}>
-              {Object.entries(byMonth).map(([m, a]) => <div className="miniRow" key={m}><b>{m}</b><b>{won(Number(a))}</b></div>)}
-              {filteredLogs.slice(0, 8).map((l) => <div className="miniRow" key={l.id}><span>{l.dividend_month} · {tickerLabel(l.ticker)}</span><span>{won(l.amount)} <button className="btn" onClick={() => delDividend(l.id)}>삭제</button></span></div>)}
+              {Object.entries(byMonth).map(([m, a]) => {
+                const amount = Number(a);
+                const receivedRate = totals.investment ? amount / totals.investment : 0;
+                return (
+                  <div className="miniRow dividendSummaryRow" key={m}>
+                    <b>{m}</b>
+                    <span className="dividendAmountBlock">
+                      <b>{won(amount)}</b>
+                      <small className="monthlyDividendRate">월 {(receivedRate * 100).toFixed(3)}%</small>
+                    </span>
+                  </div>
+                );
+              })}
+              {filteredLogs.slice(0, 8).map((l) => {
+                const receivedRate = totals.investment ? Number(l.amount || 0) / totals.investment : 0;
+                return (
+                  <div className="miniRow dividendDetailRow" key={l.id}>
+                    <span>{l.dividend_month} · {tickerLabel(l.ticker)}</span>
+                    <span className="dividendDetailAmount">
+                      <span><b>{won(l.amount)}</b><small className="monthlyDividendRate">월 {(receivedRate * 100).toFixed(3)}%</small></span>
+                      <button className="btn" onClick={() => delDividend(l.id)}>삭제</button>
+                    </span>
+                  </div>
+                );
+              })}
             </div>
           </div>
         </div>
