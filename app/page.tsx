@@ -113,6 +113,7 @@ export default function Page() {
   const [buyForm, setBuyForm] = useState({ quantity: '', price: '' });
   const [div, setDiv] = useState({ dividend_month: month(), ticker: '', amount: '' });
   const [expandedDividendMonths, setExpandedDividendMonths] = useState<string[]>([]);
+  const [showAllDividendStocks, setShowAllDividendStocks] = useState(false);
 
   const accountList = useMemo(() => {
     const active = accounts.filter((a) => a.is_active !== false);
@@ -542,6 +543,42 @@ export default function Page() {
     );
   };
 
+  const cumulativeDividendRows = useMemo(() => {
+    const groups = new Map<string, { key: string; ticker: string | null; accountId: string | null; name: string; accountName: string; amount: number }>();
+
+    for (const log of filteredLogs) {
+      const ticker = log.ticker || null;
+      const accountId = log.account_id || null;
+      const matched = ticker
+        ? rows.find((r) => r.ticker === ticker && (!accountId || r.account_id === accountId))
+          || allRows.find((r) => r.ticker === ticker && (!accountId || r.account_id === accountId))
+        : null;
+      const key = `${accountId || 'legacy'}::${ticker || 'unassigned'}`;
+      const current = groups.get(key) || {
+        key,
+        ticker,
+        accountId,
+        name: matched?.name || (ticker ? ticker : '전체/구분 없음'),
+        accountName: matched?.accountLabel || (accountId ? accountNameById.get(accountId) || '' : ''),
+        amount: 0,
+      };
+      current.amount += Number(log.amount || 0);
+      groups.set(key, current);
+    }
+
+    return Array.from(groups.values())
+      .filter((item) => item.amount > 0)
+      .sort((a, b) => b.amount - a.amount)
+      .map((item) => ({
+        ...item,
+        share: totals.received ? item.amount / totals.received : 0,
+      }));
+  }, [filteredLogs, rows, allRows, accountNameById, totals.received]);
+
+  const visibleCumulativeDividendRows = showAllDividendStocks
+    ? cumulativeDividendRows
+    : cumulativeDividendRows.slice(0, 5);
+
   const tickerLabel = (ticker: string | null) => {
     if (!ticker) return '전체/구분 없음';
     const h = rows.find((r) => r.ticker === ticker) || allRows.find((r) => r.ticker === ticker);
@@ -767,11 +804,48 @@ export default function Page() {
         </div>
         <div>
           <div className="sectionHead"><h2>배당 현황</h2></div>
-          <div className="card miniList">
+          <div className="card miniList dividendStatusCard">
             <div className="miniRow"><span>연간 예상 배당</span><b>{won(totals.annual)}</b></div>
             <div className="miniRow"><span>월 예상 배당</span><b>{won(totals.monthly)}</b></div>
             <div className="miniRow"><span>누적 수령 배당</span><b>{won(totals.received)}</b></div>
             <div><div className="sub">평가금 대비 배당률</div><div className="bar"><span style={{ width: Math.min(100, totals.value ? (totals.annual / totals.value) * 1000 : 0) + '%' }} /></div></div>
+
+            <div className="cumulativeDividendSection">
+              <div className="cumulativeDividendHead">
+                <div>
+                  <span className="metricLabel">종목별 누적 배당</span>
+                  <b>{cumulativeDividendRows.length}개 종목</b>
+                </div>
+                {cumulativeDividendRows.length > 5 && (
+                  <button type="button" className="textButton" onClick={() => setShowAllDividendStocks((value) => !value)}>
+                    {showAllDividendStocks ? '접기' : '전체보기'}
+                  </button>
+                )}
+              </div>
+
+              {visibleCumulativeDividendRows.length ? (
+                <div className="cumulativeDividendList">
+                  {visibleCumulativeDividendRows.map((item, index) => (
+                    <div className="cumulativeDividendItem" key={item.key}>
+                      <div className="cumulativeDividendMeta">
+                        <span className="cumulativeDividendRank">{index + 1}</span>
+                        <div>
+                          <b>{item.name}</b>
+                          <small>{item.ticker || '구분 없음'}{item.accountName ? ` · ${item.accountName}` : ''}</small>
+                        </div>
+                        <strong>{won(item.amount)}</strong>
+                      </div>
+                      <div className="cumulativeDividendBar">
+                        <span style={{ width: Math.max(2, item.share * 100) + '%' }} />
+                      </div>
+                      <div className="cumulativeDividendShare">누적 배당 비중 {(item.share * 100).toFixed(1)}%</div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="emptyDividendState compact">종목별 배당 수령 내역이 없습니다.</div>
+              )}
+            </div>
           </div>
         </div>
       </section>

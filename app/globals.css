@@ -91,3 +91,29 @@ button{touch-action:manipulation}
   .dividendMonthDetails .dividendDetailRow{display:grid;grid-template-columns:1fr;gap:8px;padding:13px 0}
   .dividendMonthDetails .dividendDetailAmount{width:100%;justify-content:space-between;text-align:left}
 }
+
+/* v29: 종목별 누적 배당 */
+.dividendStatusCard{align-content:start}
+.cumulativeDividendSection{margin-top:8px;padding-top:17px;border-top:1px solid var(--line);display:grid;gap:14px}
+.cumulativeDividendHead{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.cumulativeDividendHead>div{display:grid;gap:4px}
+.cumulativeDividendHead b{font-size:16px;letter-spacing:-.03em}
+.textButton{border:0;background:#eef5ff;color:var(--blue);border-radius:999px;padding:7px 11px;font-size:11px;font-weight:900;cursor:pointer}
+.cumulativeDividendList{display:grid;gap:13px}
+.cumulativeDividendItem{display:grid;gap:7px}
+.cumulativeDividendMeta{display:grid;grid-template-columns:24px minmax(0,1fr) auto;align-items:center;gap:9px}
+.cumulativeDividendRank{display:grid;place-items:center;width:24px;height:24px;border-radius:8px;background:#f1f5f9;color:#475467;font-size:11px;font-weight:950}
+.cumulativeDividendMeta>div{min-width:0}
+.cumulativeDividendMeta b{display:block;font-size:12px;line-height:1.28;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cumulativeDividendMeta small{display:block;color:var(--muted);font-size:10px;line-height:1.3;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cumulativeDividendMeta strong{font-size:12px;font-variant-numeric:tabular-nums;white-space:nowrap}
+.cumulativeDividendBar{height:8px;background:#eef2f7;border-radius:999px;overflow:hidden;margin-left:33px}
+.cumulativeDividendBar span{display:block;height:100%;border-radius:inherit;background:linear-gradient(90deg,#0a7cff,#24b26b)}
+.cumulativeDividendShare{margin-left:33px;color:var(--muted);font-size:10px;font-weight:750;text-align:right}
+.emptyDividendState.compact{padding:16px 0}
+@media(max-width:680px){
+  .cumulativeDividendMeta{grid-template-columns:22px minmax(0,1fr);gap:8px}
+  .cumulativeDividendMeta strong{grid-column:2;text-align:left;font-size:13px;margin-top:2px}
+  .cumulativeDividendBar,.cumulativeDividendShare{margin-left:30px}
+  .cumulativeDividendShare{text-align:left}
+}
