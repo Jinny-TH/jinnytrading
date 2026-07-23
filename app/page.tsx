@@ -529,8 +529,24 @@ export default function Page() {
 
   const tickerLabel = (ticker: string | null) => {
     if (!ticker) return '전체/구분 없음';
-    const h = allRows.find((r) => r.ticker === ticker);
+    const h = rows.find((r) => r.ticker === ticker) || allRows.find((r) => r.ticker === ticker);
     return h ? `${h.name} · ${ticker}` : ticker;
+  };
+
+  const dividendRateForLog = (log: DivLog) => {
+    if (!log.ticker) {
+      const monthlyRate = totals.investment ? Number(log.amount || 0) / totals.investment : 0;
+      return { monthlyRate, annualizedRate: 0, cycle: '구분 없음', investment: totals.investment };
+    }
+
+    const matchedRows = rows.filter((r) => r.ticker === log.ticker);
+    const investment = matchedRows.reduce((sum, r) => sum + Number(r.investment || 0), 0);
+    const monthlyRate = investment ? Number(log.amount || 0) / investment : 0;
+    const cycle = matchedRows.find((r) => r.dividend_cycle && r.dividend_cycle !== '없음')?.dividend_cycle || '없음';
+    const annualMultiplier: Record<string, number> = { 월: 12, 분기: 4, 반기: 2, 년: 1 };
+    const annualizedRate = monthlyRate * (annualMultiplier[cycle] || 0);
+
+    return { monthlyRate, annualizedRate, cycle, investment };
   };
 
   const latestSnap = filteredSnaps.length ? filteredSnaps[filteredSnaps.length - 1] : null;
@@ -700,12 +716,16 @@ export default function Page() {
                 );
               })}
               {filteredLogs.slice(0, 8).map((l) => {
-                const receivedRate = totals.investment ? Number(l.amount || 0) / totals.investment : 0;
+                const rate = dividendRateForLog(l);
                 return (
                   <div className="miniRow dividendDetailRow" key={l.id}>
                     <span>{l.dividend_month} · {tickerLabel(l.ticker)}</span>
                     <span className="dividendDetailAmount">
-                      <span><b>{won(l.amount)}</b><small className="monthlyDividendRate">월 {(receivedRate * 100).toFixed(3)}%</small></span>
+                      <span>
+                        <b>{won(l.amount)}</b>
+                        <small className="monthlyDividendRate">월 {(rate.monthlyRate * 100).toFixed(3)}%</small>
+                        {rate.annualizedRate > 0 && <small className="annualizedDividendRate">연환산 {(rate.annualizedRate * 100).toFixed(2)}% · {rate.cycle}</small>}
+                      </span>
                       <button className="btn" onClick={() => delDividend(l.id)}>삭제</button>
                     </span>
                   </div>
