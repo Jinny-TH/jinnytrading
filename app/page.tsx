@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../lib/supabase';
-import { RefreshCw, Settings, Plus, Save, Trash2, Pencil } from 'lucide-react';
+import { RefreshCw, Settings, Plus, Save, Trash2, Pencil, ChevronDown } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, LabelList, PieChart, Pie, Cell } from 'recharts';
 
 type Account = {
@@ -112,6 +112,7 @@ export default function Page() {
   const [buyTarget, setBuyTarget] = useState<Row | null>(null);
   const [buyForm, setBuyForm] = useState({ quantity: '', price: '' });
   const [div, setDiv] = useState({ dividend_month: month(), ticker: '', amount: '' });
+  const [expandedDividendMonths, setExpandedDividendMonths] = useState<string[]>([]);
 
   const accountList = useMemo(() => {
     const active = accounts.filter((a) => a.is_active !== false);
@@ -522,10 +523,24 @@ export default function Page() {
 
 
 
-  const byMonth = useMemo(() => filteredLogs.reduce((m: Record<string, number>, l) => {
-    m[l.dividend_month] = (m[l.dividend_month] || 0) + Number(l.amount);
-    return m;
-  }, {}), [filteredLogs]);
+  const dividendGroups = useMemo(() => {
+    const groups = new Map<string, { month: string; amount: number; logs: DivLog[] }>();
+    for (const log of filteredLogs) {
+      const existing = groups.get(log.dividend_month) || { month: log.dividend_month, amount: 0, logs: [] };
+      existing.amount += Number(log.amount || 0);
+      existing.logs.push(log);
+      groups.set(log.dividend_month, existing);
+    }
+    return Array.from(groups.values()).sort((a, b) => b.month.localeCompare(a.month));
+  }, [filteredLogs]);
+
+  const toggleDividendMonth = (targetMonth: string) => {
+    setExpandedDividendMonths((current) =>
+      current.includes(targetMonth)
+        ? current.filter((item) => item !== targetMonth)
+        : [...current, targetMonth]
+    );
+  };
 
   const tickerLabel = (ticker: string | null) => {
     if (!ticker) return '전체/구분 없음';
@@ -702,35 +717,51 @@ export default function Page() {
               <button className="btn primary" onClick={addDividend}><Plus size={15}/> 추가</button>
             </div>
             <div className="miniList" style={{ marginTop: 14 }}>
-              {Object.entries(byMonth).map(([m, a]) => {
-                const amount = Number(a);
-                const receivedRate = totals.investment ? amount / totals.investment : 0;
+              {dividendGroups.map((group) => {
+                const receivedRate = totals.investment ? group.amount / totals.investment : 0;
+                const isExpanded = expandedDividendMonths.includes(group.month);
                 return (
-                  <div className="miniRow dividendSummaryRow" key={m}>
-                    <b>{m}</b>
-                    <span className="dividendAmountBlock">
-                      <b>{won(amount)}</b>
-                      <small className="monthlyDividendRate">월 {(receivedRate * 100).toFixed(3)}%</small>
-                    </span>
-                  </div>
-                );
-              })}
-              {filteredLogs.slice(0, 8).map((l) => {
-                const rate = dividendRateForLog(l);
-                return (
-                  <div className="miniRow dividendDetailRow" key={l.id}>
-                    <span>{l.dividend_month} · {tickerLabel(l.ticker)}</span>
-                    <span className="dividendDetailAmount">
-                      <span>
-                        <b>{won(l.amount)}</b>
-                        <small className="monthlyDividendRate">월 {(rate.monthlyRate * 100).toFixed(3)}%</small>
-                        {rate.annualizedRate > 0 && <small className="annualizedDividendRate">연환산 {(rate.annualizedRate * 100).toFixed(2)}% · {rate.cycle}</small>}
+                  <div className={'dividendMonthGroup ' + (isExpanded ? 'open' : '')} key={group.month}>
+                    <button
+                      type="button"
+                      className="dividendMonthToggle"
+                      onClick={() => toggleDividendMonth(group.month)}
+                      aria-expanded={isExpanded}
+                    >
+                      <span className="dividendMonthTitle">
+                        <ChevronDown size={17} className="dividendMonthChevron" />
+                        <b>{group.month}</b>
+                        <small>{group.logs.length}건</small>
                       </span>
-                      <button className="btn" onClick={() => delDividend(l.id)}>삭제</button>
-                    </span>
+                      <span className="dividendAmountBlock">
+                        <b>{won(group.amount)}</b>
+                        <small className="monthlyDividendRate">월 {(receivedRate * 100).toFixed(3)}%</small>
+                      </span>
+                    </button>
+                    {isExpanded && (
+                      <div className="dividendMonthDetails">
+                        {group.logs.map((log) => {
+                          const rate = dividendRateForLog(log);
+                          return (
+                            <div className="miniRow dividendDetailRow" key={log.id}>
+                              <span className="dividendDetailName">{tickerLabel(log.ticker)}</span>
+                              <span className="dividendDetailAmount">
+                                <span>
+                                  <b>{won(log.amount)}</b>
+                                  <small className="monthlyDividendRate">월 {(rate.monthlyRate * 100).toFixed(3)}%</small>
+                                  {rate.annualizedRate > 0 && <small className="annualizedDividendRate">연환산 {(rate.annualizedRate * 100).toFixed(2)}% · {rate.cycle}</small>}
+                                </span>
+                                <button className="btn" onClick={() => delDividend(log.id)}>삭제</button>
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
                 );
               })}
+              {!dividendGroups.length && <div className="emptyDividendState">등록된 배당 수령 내역이 없습니다.</div>}
             </div>
           </div>
         </div>

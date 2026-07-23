@@ -67,3 +67,27 @@ button{touch-action:manipulation}
 /* v27: 개별 종목 실제 수령 배당률 */
 .annualizedDividendRate{display:block;margin-top:2px;color:#64748b;font-size:11px;font-weight:600;line-height:1.25;white-space:nowrap}
 @media (max-width: 640px){.annualizedDividendRate{font-size:10px}.dividendDetailAmount>span{min-width:92px;text-align:right}}
+
+/* v28: 월별 배당 아코디언 */
+.dividendMonthGroup{border-top:1px solid var(--line)}
+.dividendMonthGroup:first-child{border-top:0}
+.dividendMonthToggle{width:100%;border:0;background:transparent;display:flex;align-items:center;justify-content:space-between;gap:16px;padding:15px 0;color:var(--ink);cursor:pointer;text-align:left;font:inherit}
+.dividendMonthToggle:hover{background:rgba(15,23,42,.025)}
+.dividendMonthTitle{display:flex;align-items:center;gap:8px;min-width:0}
+.dividendMonthTitle b{font-size:13px}
+.dividendMonthTitle small{color:var(--muted);font-size:11px;font-weight:800;background:#f1f4f8;border-radius:999px;padding:3px 7px}
+.dividendMonthChevron{flex:0 0 auto;color:var(--muted);transition:transform .2s ease}
+.dividendMonthGroup.open .dividendMonthChevron{transform:rotate(180deg)}
+.dividendMonthDetails{border-top:1px dashed var(--line);padding-left:25px;background:linear-gradient(180deg,rgba(248,250,252,.85),rgba(255,255,255,.25))}
+.dividendMonthDetails .dividendDetailRow:first-child{border-top:0}
+.dividendDetailName{line-height:1.4;min-width:0;overflow-wrap:anywhere}
+.emptyDividendState{padding:28px 0;text-align:center;color:var(--muted);font-size:13px}
+
+@media (max-width:768px){
+  .dividendMonthToggle{padding:14px 0;align-items:flex-start}
+  .dividendMonthDetails{padding-left:14px}
+  .dividendMonthTitle{padding-top:2px}
+  .dividendMonthToggle .dividendAmountBlock{flex:0 0 auto}
+  .dividendMonthDetails .dividendDetailRow{display:grid;grid-template-columns:1fr;gap:8px;padding:13px 0}
+  .dividendMonthDetails .dividendDetailAmount{width:100%;justify-content:space-between;text-align:left}
+}
