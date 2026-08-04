@@ -544,25 +544,38 @@ export default function Page() {
   };
 
   const cumulativeDividendRows = useMemo(() => {
-    const groups = new Map<string, { key: string; ticker: string | null; accountId: string | null; name: string; accountName: string; amount: number }>();
+    // 동일 종목은 배당 지급 월이나 account_id 유무와 관계없이 종목코드(ticker) 기준으로 합산합니다.
+    // 과거 배당 데이터에는 account_id가 비어 있는 경우가 있어 account_id까지 키에 넣으면
+    // 같은 종목이 여러 줄로 분리될 수 있습니다.
+    const groups = new Map<string, {
+      key: string;
+      ticker: string | null;
+      name: string;
+      accountNames: string[];
+      amount: number;
+    }>();
 
     for (const log of filteredLogs) {
-      const ticker = log.ticker || null;
+      const ticker = log.ticker?.trim() || null;
       const accountId = log.account_id || null;
       const matched = ticker
         ? rows.find((r) => r.ticker === ticker && (!accountId || r.account_id === accountId))
           || allRows.find((r) => r.ticker === ticker && (!accountId || r.account_id === accountId))
+          || rows.find((r) => r.ticker === ticker)
+          || allRows.find((r) => r.ticker === ticker)
         : null;
-      const key = `${accountId || 'legacy'}::${ticker || 'unassigned'}`;
+      const key = ticker || 'unassigned';
+      const accountName = matched?.accountLabel || (accountId ? accountNameById.get(accountId) || '' : '');
       const current = groups.get(key) || {
         key,
         ticker,
-        accountId,
         name: matched?.name || (ticker ? ticker : '전체/구분 없음'),
-        accountName: matched?.accountLabel || (accountId ? accountNameById.get(accountId) || '' : ''),
+        accountNames: [],
         amount: 0,
       };
+
       current.amount += Number(log.amount || 0);
+      if (accountName && !current.accountNames.includes(accountName)) current.accountNames.push(accountName);
       groups.set(key, current);
     }
 
@@ -571,6 +584,7 @@ export default function Page() {
       .sort((a, b) => b.amount - a.amount)
       .map((item) => ({
         ...item,
+        accountName: item.accountNames.length > 1 ? '여러 계좌' : (item.accountNames[0] || ''),
         share: totals.received ? item.amount / totals.received : 0,
       }));
   }, [filteredLogs, rows, allRows, accountNameById, totals.received]);
