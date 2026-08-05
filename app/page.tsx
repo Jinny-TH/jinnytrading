@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { RefreshCw, Settings, Plus, Save, Trash2, Pencil, ChevronDown } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, LabelList, PieChart, Pie, Cell } from 'recharts';
@@ -69,6 +69,12 @@ const compactWon = (n: number) => {
   if (Math.abs(value) >= 10000) return Math.round(value / 10000).toLocaleString('ko-KR') + '만';
   return value.toLocaleString('ko-KR');
 };
+const chartLabelWon = (n: number) => {
+  const value = Number(n || 0);
+  if (Math.abs(value) >= 100000000) return `${(value / 100000000).toFixed(2)}억`;
+  if (Math.abs(value) >= 10000) return `${(value / 10000).toFixed(2)}만`;
+  return `${Math.round(value).toLocaleString('ko-KR')}원`;
+};
 const pct = (n: number) => `${n >= 0 ? '+' : ''}${(n * 100).toFixed(2)}%`;
 const parseNumber = (v: unknown) => Number(String(v ?? '').replace(/[^0-9.]/g, '')) || 0;
 const today = () => new Date().toISOString().slice(0, 10);
@@ -114,6 +120,7 @@ export default function Page() {
   const [div, setDiv] = useState({ dividend_month: month(), ticker: '', amount: '' });
   const [expandedDividendMonths, setExpandedDividendMonths] = useState<string[]>([]);
   const [showAllDividendStocks, setShowAllDividendStocks] = useState(false);
+  const assetChartScrollRef = useRef<HTMLDivElement | null>(null);
 
   const accountList = useMemo(() => {
     const active = accounts.filter((a) => a.is_active !== false);
@@ -216,6 +223,15 @@ export default function Page() {
       }),
     [snaps, selectedAccountId, selectedAccountName]
   );
+
+
+  useEffect(() => {
+    const el = assetChartScrollRef.current;
+    if (!el) return;
+    requestAnimationFrame(() => {
+      el.scrollLeft = el.scrollWidth;
+    });
+  }, [filteredSnaps.length, selectedAccountId]);
 
   const totals = useMemo(() => {
     const investment = rows.reduce((s, r) => s + r.investment, 0);
@@ -620,6 +636,14 @@ export default function Page() {
   const chartDiff = latestSnap && previousSnap ? Number(latestSnap.total_value || 0) - Number(previousSnap.total_value || 0) : 0;
   const chartDiffRate = previousSnap?.total_value ? chartDiff / Number(previousSnap.total_value) : 0;
 
+  const assetChartWidth = `${Math.max(100, (filteredSnaps.length / 14) * 100)}%`;
+  const scrollAssetChart = (direction: -1 | 1) => {
+    assetChartScrollRef.current?.scrollBy({
+      left: direction * Math.max(420, assetChartScrollRef.current.clientWidth * 0.8),
+      behavior: 'smooth',
+    });
+  };
+
   const allocationRows = useMemo(() => {
     const sorted = [...rows].filter((r) => r.value > 0).sort((a, b) => b.value - a.value);
     const top = sorted.slice(0, 8).map((r) => ({ name: r.name, ticker: r.ticker, value: r.value, share: totals.value ? r.value / totals.value : 0 }));
@@ -880,24 +904,33 @@ export default function Page() {
                   <em>{pct(chartDiffRate)}</em>
                 </div>
               </div>
-              <div className="chart">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={filteredSnaps} margin={{ top: 34, right: 8, left: 8, bottom: 2 }}>
-                    <defs>
-                      <linearGradient id="assetBarGradient" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="#0a7cff" stopOpacity={0.96}/>
-                        <stop offset="100%" stopColor="#20c06b" stopOpacity={0.82}/>
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 5" vertical={false} stroke="#e7ebf2"/>
-                    <XAxis dataKey="snapshot_date" tick={{ fontSize: 11, fill: '#667085' }} tickLine={false} axisLine={false}/>
-                    <YAxis hide domain={[0, 'dataMax']}/>
-                    <Tooltip content={<AssetTooltip />} cursor={{ fill: 'rgba(10,124,255,.07)' }}/>
-                    <Bar dataKey="total_value" fill="url(#assetBarGradient)" radius={[12, 12, 4, 4]} barSize={42}>
-                      <LabelList dataKey="total_value" position="top" formatter={(v: any) => compactWon(Number(v))} className="barLabel"/>
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
+              <div className="assetChartToolbar">
+                <span>최근 14일 기준 · 좌우로 이동해 이전 기록 확인</span>
+                <div className="assetChartNav">
+                  <button type="button" aria-label="이전 일자 보기" onClick={() => scrollAssetChart(-1)}>‹</button>
+                  <button type="button" aria-label="다음 일자 보기" onClick={() => scrollAssetChart(1)}>›</button>
+                </div>
+              </div>
+              <div className="assetChartViewport" ref={assetChartScrollRef}>
+                <div className="chart assetChartInner" style={{ width: assetChartWidth }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={filteredSnaps} margin={{ top: 38, right: 10, left: 10, bottom: 2 }} barCategoryGap="18%">
+                      <defs>
+                        <linearGradient id="assetBarGradient" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="#0a7cff" stopOpacity={0.96}/>
+                          <stop offset="100%" stopColor="#20c06b" stopOpacity={0.82}/>
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 5" vertical={false} stroke="#e7ebf2"/>
+                      <XAxis dataKey="snapshot_date" interval={1} tick={{ fontSize: 11, fill: '#667085' }} tickLine={false} axisLine={false}/>
+                      <YAxis hide domain={[0, 'dataMax']}/>
+                      <Tooltip content={<AssetTooltip />} cursor={{ fill: 'rgba(10,124,255,.07)' }}/>
+                      <Bar dataKey="total_value" fill="url(#assetBarGradient)" radius={[12, 12, 4, 4]} maxBarSize={44}>
+                        <LabelList dataKey="total_value" position="top" formatter={(v: any) => chartLabelWon(Number(v))} className="barLabel"/>
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
               </div>
             </>
           ) : <span className="sub">선택한 계좌의 기록이 2일 이상 저장되면 그래프가 표시됩니다.</span>}

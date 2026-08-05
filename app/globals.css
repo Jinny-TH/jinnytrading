@@ -117,3 +117,20 @@ button{touch-action:manipulation}
   .cumulativeDividendBar,.cumulativeDividendShare{margin-left:30px}
   .cumulativeDividendShare{text-align:left}
 }
+
+/* v32: 14-day asset chart viewport with horizontal history navigation */
+.assetChartToolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:2px 2px 8px;color:var(--muted);font-size:11px;font-weight:800}
+.assetChartNav{display:flex;gap:6px;flex:0 0 auto}
+.assetChartNav button{width:34px;height:34px;border:1px solid var(--line);border-radius:11px;background:#fff;color:var(--ink);font-size:24px;line-height:1;cursor:pointer;box-shadow:0 4px 12px rgba(16,24,40,.06)}
+.assetChartNav button:hover{background:#f5f8fc}
+.assetChartViewport{width:100%;overflow-x:auto;overflow-y:hidden;scroll-behavior:smooth;overscroll-behavior-x:contain;scrollbar-width:thin;scrollbar-color:#b8c2d1 transparent;padding-bottom:5px}
+.assetChartViewport::-webkit-scrollbar{height:8px}
+.assetChartViewport::-webkit-scrollbar-track{background:transparent}
+.assetChartViewport::-webkit-scrollbar-thumb{background:#c5ceda;border-radius:999px}
+.assetChartInner{min-width:100%;max-width:none;justify-content:flex-start}
+
+@media(max-width:700px){
+  .assetChartToolbar{align-items:flex-start;font-size:10px}
+  .assetChartNav button{width:32px;height:32px}
+  .assetChartInner{min-width:100%}
+}
