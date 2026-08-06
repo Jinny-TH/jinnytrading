@@ -32,3 +32,8 @@ add column if not exists memo text;
 ```
 
 메모는 최대 500자까지 입력하도록 화면에서 제한합니다. 기존 종목 데이터에는 영향이 없습니다.
+
+## v33.2 build fix
+- Added a valid root `layout.tsx` placeholder to overwrite the accidentally uploaded CSS file.
+- Limited TypeScript compilation paths to `app/**` and `lib/**`.
+- The actual application layout remains `app/layout.tsx`.
