@@ -28,6 +28,7 @@ type Holding = {
   current_price: number;
   dividend_yield: number | string | null;
   dividend_cycle: string;
+  memo?: string | null;
 };
 
 type Row = Holding & {
@@ -113,6 +114,7 @@ export default function Page() {
     avg_price: '',
     dividend_yield: '',
     dividend_cycle: '없음',
+    memo: '',
   });
   const [editingId, setEditingId] = useState<string | null>(null);
   const [buyTarget, setBuyTarget] = useState<Row | null>(null);
@@ -323,6 +325,7 @@ export default function Page() {
       avg_price: '',
       dividend_yield: '',
       dividend_cycle: '없음',
+      memo: '',
     });
   }
 
@@ -342,6 +345,7 @@ export default function Page() {
       avg_price: String(r.avg_price || ''),
       dividend_yield: r.dividend_yield ? (Number(r.dividend_yield) * 100).toFixed(2) : '',
       dividend_cycle: r.dividend_cycle || (r.dividend_yield ? '월' : '없음'),
+      memo: r.memo || '',
     });
     setMsg('선택한 종목을 설정 영역에서 수정할 수 있습니다. 저장 시 현재가를 다시 조회합니다.');
   }
@@ -383,6 +387,7 @@ export default function Page() {
       current_price: fetchedPrice || Number(previous?.current_price || 0),
       dividend_yield: hasDividend ? (manualYield ?? (previous && previous.dividend_cycle !== '없음' ? storedYield(previous.dividend_yield) : null)) : null,
       dividend_cycle: hasDividend ? form.dividend_cycle : '없음',
+      memo: form.memo.trim() || null,
     };
 
     const result = isEditing
@@ -665,10 +670,16 @@ export default function Page() {
   return (
     <main className="wrap">
       <header className="hero">
-        <div>
-          <div className="eyebrow">JINNY TRADING</div>
-          <h1 className="title">ETF 포트폴리오</h1>
-          <p className="sub">계좌 테이블 분리 · Supabase DB 저장 · 매일 오전 3시 자동 기록</p>
+        <div className="brandIdentity">
+          <div className="brandMark" aria-label="Jinny Invest BI">
+            <span className="brandMonogram">JI</span>
+            <span className="brandRise"><i/><i/><i/></span>
+          </div>
+          <div>
+            <div className="eyebrow">JINNY INVEST</div>
+            <h1 className="title">종합 금융 투자 관리</h1>
+            <p className="sub">통합 계좌 관리 · 투자 분석 · 배당 관리 · 매일 오전 3시 자동 기록</p>
+          </div>
         </div>
         <div className="toolbar">
           <button className="btn blue" onClick={updatePrices} disabled={busy}><RefreshCw size={15}/> 오늘 시세 업데이트</button>
@@ -763,7 +774,7 @@ export default function Page() {
                 <tr key={r.id || `${r.account_id}-${r.ticker}`}> 
                   <td><span className="accountPill">{r.accountLabel}</span></td>
                   <td><span className={'pill ' + (r.risk_type === '위험' ? 'risk' : '')}>{r.risk_type}</span></td>
-                  <td><b>{r.name}</b><div className="sub">{r.region} · {r.ticker}</div></td>
+                  <td><b>{r.name}</b><div className="sub">{r.region} · {r.ticker}</div>{r.memo && <div className="holdingMemo" title={r.memo}>메모 · {r.memo}</div>}</td>
                   <td className="num">{Number(r.quantity).toLocaleString()}</td>
                   <td className="num">{Math.round(Number(r.avg_price)).toLocaleString()}</td>
                   <td className="num"><span className="plainPrice">{Number(r.current_price) > 0 ? Math.round(Number(r.current_price)).toLocaleString('ko-KR') : '미조회'}</span></td>
@@ -953,6 +964,7 @@ export default function Page() {
               {DIVIDEND_CYCLES.map((cycle) => <option key={cycle} value={cycle}>{cycle}</option>)}
             </select>
             <input className="input" type="number" inputMode="decimal" step="0.01" min="0" placeholder={form.dividend_cycle === '없음' ? '배당 없음' : '배당률 % 예: 1.15'} value={form.dividend_yield} disabled={form.dividend_cycle === '없음'} onChange={(e) => setForm({ ...form, dividend_yield: e.target.value })} />
+            <textarea className="input memoInput" rows={2} maxLength={500} placeholder="투자 메모 (매수 이유, 목표가, 점검 사항 등)" value={form.memo} onChange={(e) => setForm({ ...form, memo: e.target.value })} />
             <button className="btn green" onClick={saveHolding} disabled={busy || !accounts.length}>{editingId ? '수정 저장' : '저장 후 현재가 조회'}</button>
           </div>
         </div>

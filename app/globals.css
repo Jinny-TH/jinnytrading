@@ -134,3 +134,17 @@ button{touch-action:manipulation}
   .assetChartNav button{width:32px;height:32px}
   .assetChartInner{min-width:100%}
 }
+
+
+/* v33: Jinny Invest BI + investment memo */
+.brandIdentity{display:flex;align-items:center;gap:14px;min-width:0}
+.brandMark{position:relative;width:54px;height:54px;flex:0 0 54px;border-radius:17px;background:linear-gradient(145deg,#071d44 0%,#0a68dc 58%,#18b976 100%);box-shadow:0 12px 28px rgba(10,104,220,.24);overflow:hidden;color:#fff}
+.brandMark:after{content:'';position:absolute;inset:1px;border-radius:16px;border:1px solid rgba(255,255,255,.25);pointer-events:none}
+.brandMonogram{position:absolute;left:10px;top:9px;font-size:18px;font-weight:950;letter-spacing:-.08em}
+.brandRise{position:absolute;right:8px;bottom:9px;height:23px;display:flex;align-items:flex-end;gap:3px;transform:skewX(-8deg)}
+.brandRise i{display:block;width:5px;border-radius:4px 4px 1px 1px;background:rgba(255,255,255,.95)}
+.brandRise i:nth-child(1){height:8px}.brandRise i:nth-child(2){height:15px}.brandRise i:nth-child(3){height:23px}
+.memoInput{grid-column:1/-2;resize:vertical;line-height:1.45;min-height:64px}
+.holdingMemo{margin-top:6px;padding:6px 8px;border-radius:9px;background:#f4f7fb;color:#475467;font-size:11px;line-height:1.4;max-width:360px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+@media(max-width:1020px){.memoInput{grid-column:1/-1}}
+@media(max-width:680px){.brandIdentity{align-items:flex-start;gap:11px}.brandMark{width:46px;height:46px;flex-basis:46px;border-radius:14px}.brandMark:after{border-radius:13px}.brandMonogram{left:8px;top:7px;font-size:16px}.brandRise{right:7px;bottom:7px;height:19px}.brandRise i{width:4px}.brandRise i:nth-child(1){height:7px}.brandRise i:nth-child(2){height:12px}.brandRise i:nth-child(3){height:19px}.holdingMemo{white-space:normal;max-width:none;margin-top:7px}.memoInput{min-height:88px}}
